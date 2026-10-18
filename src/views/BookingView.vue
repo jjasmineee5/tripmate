@@ -10,7 +10,15 @@ const email = ref('')
 const phone = ref('')
 const errorMessage = ref('')
 
+const currentUser = ref(null)
+
 try {
+  const savedUser = localStorage.getItem('tripmate-current-user')
+
+  if (savedUser) {
+    currentUser.value = JSON.parse(savedUser)
+  }
+
   const savedFlight = localStorage.getItem('tripmate-selected-flight')
 
   if (savedFlight) {
@@ -18,6 +26,7 @@ try {
   }
 } catch {
   flight.value = null
+  currentUser.value = null
 }
 
 const passengerNames = ref(
@@ -36,6 +45,11 @@ const formattedPrice = computed(() => {
 
 function submitBooking() {
   errorMessage.value = ''
+
+  if (!currentUser.value?.id && !currentUser.value?.email) {
+    errorMessage.value = 'Sesi login tidak ditemukan. Silakan login kembali sebelum memesan tiket.'
+    return
+  }
 
   if (!flight.value) {
     errorMessage.value = 'Data penerbangan tidak ditemukan. Silakan pilih penerbangan lagi.'
@@ -73,6 +87,10 @@ function submitBooking() {
 
     const booking = {
       id: `TM${Date.now().toString().slice(-8)}`,
+      userId: currentUser.value.id || null,
+      userEmail: String(currentUser.value.email || '')
+        .trim()
+        .toLowerCase(),
       status: 'Simulasi',
       createdAt: new Date().toISOString(),
       contact: {

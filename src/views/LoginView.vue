@@ -1,4 +1,3 @@
-```vue
 <script setup>
 import { ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
@@ -12,11 +11,24 @@ const errorMessage = ref('')
 function login() {
   errorMessage.value = ''
 
-  const users = JSON.parse(localStorage.getItem('tripmate-users') || '[]')
+  let users
+
+  try {
+    const storedUsers = JSON.parse(localStorage.getItem('tripmate-users') || '[]')
+
+    users = Array.isArray(storedUsers) ? storedUsers : []
+  } catch {
+    errorMessage.value = 'Data akun tidak valid. Silakan periksa kembali.'
+    return
+  }
+
   const normalizedEmail = email.value.trim().toLowerCase()
 
   const user = users.find(
-    (item) => item.email === normalizedEmail && item.password === password.value,
+    (item) =>
+      typeof item.email === 'string' &&
+      item.email.trim().toLowerCase() === normalizedEmail &&
+      item.password === password.value,
   )
 
   if (!user) {
@@ -24,6 +36,7 @@ function login() {
     return
   }
 
+  // Simpan informasi pengguna yang sedang login
   localStorage.setItem(
     'tripmate-current-user',
     JSON.stringify({
@@ -33,7 +46,14 @@ function login() {
     }),
   )
 
-  router.push('/')
+  // Kembali ke halaman yang dituju sebelum login
+  const redirect = router.currentRoute.value.query.redirect
+
+  if (typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')) {
+    router.push(redirect)
+  } else {
+    router.push('/')
+  }
 }
 </script>
 
@@ -44,13 +64,16 @@ function login() {
         <p class="text-sm font-semibold uppercase tracking-[0.2em] text-[#347bd0]">
           Selamat Datang Kembali
         </p>
+
         <h1 class="mt-3 text-3xl font-bold text-[#263951]">Masuk ke TripMate</h1>
+
         <p class="mt-2 text-sm text-slate-600">Masuk untuk melanjutkan rencana perjalananmu.</p>
       </div>
 
       <form class="space-y-4" @submit.prevent="login">
         <label class="block">
-          <span class="mb-2 block text-sm font-medium text-[#263951]">Email</span>
+          <span class="mb-2 block text-sm font-medium text-[#263951]"> Email </span>
+
           <input
             v-model="email"
             type="email"
@@ -62,7 +85,8 @@ function login() {
         </label>
 
         <label class="block">
-          <span class="mb-2 block text-sm font-medium text-[#263951]">Kata sandi</span>
+          <span class="mb-2 block text-sm font-medium text-[#263951]"> Kata sandi </span>
+
           <input
             v-model="password"
             type="password"
@@ -87,6 +111,7 @@ function login() {
 
       <p class="mt-6 text-center text-sm text-slate-600">
         Belum punya akun?
+
         <RouterLink to="/register" class="font-semibold text-[#347bd0] hover:underline">
           Daftar
         </RouterLink>

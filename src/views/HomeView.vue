@@ -1,31 +1,114 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import heroImage from '../assets/images/hero beranda.png'
 
-const origin = ref('Balikpapan (BPN)')
-const destination = ref('Bali (DPS)')
+const router = useRouter()
+
+const origin = ref('Balikpapan')
+const destination = ref('Denpasar')
 const departureDate = ref('')
 const passengers = ref(1)
 
+const showOriginSuggestions = ref(false)
+const showDestinationSuggestions = ref(false)
+
+const cities = [
+  'Balikpapan',
+  'Samarinda',
+  'Jakarta',
+  'Surabaya',
+  'Denpasar',
+  'Yogyakarta',
+  'Makassar',
+  'Banjarmasin',
+  'Pontianak',
+  'Bandung',
+  'Medan',
+  'Lombok',
+  'Manado',
+  'Palembang',
+  'Semarang',
+  'Malang',
+  'Batam',
+  'Padang',
+  'Aceh',
+  'Kupang',
+  'Jayapura',
+  'Solo',
+  'Pekanbaru',
+  'Jambi',
+  'Bengkulu',
+]
+
+const today = (() => {
+  const date = new Date()
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  return date.toISOString().split('T')[0]
+})()
+
+const filteredOrigins = computed(() => {
+  const query = origin.value.trim().toLowerCase()
+
+  if (!query) return cities
+
+  return cities.filter((city) => city.toLowerCase().includes(query))
+})
+
+const filteredDestinations = computed(() => {
+  const query = destination.value.trim().toLowerCase()
+
+  if (!query) return cities
+
+  return cities.filter((city) => city.toLowerCase().includes(query))
+})
+
+function selectOrigin(city) {
+  origin.value = city
+  showOriginSuggestions.value = false
+}
+
+function selectDestination(city) {
+  destination.value = city
+  showDestinationSuggestions.value = false
+}
+
 function searchFlights() {
-  if (!origin.value || !destination.value || !departureDate.value) {
+  const cleanOrigin = origin.value.trim()
+  const cleanDestination = destination.value.trim()
+
+  if (!cleanOrigin || !cleanDestination || !departureDate.value) {
     alert('Lengkapi kota asal, kota tujuan, dan tanggal keberangkatan.')
     return
   }
 
-  if (origin.value === destination.value) {
+  if (cleanOrigin.toLowerCase() === cleanDestination.toLowerCase()) {
     alert('Kota asal dan tujuan harus berbeda.')
     return
   }
 
-  alert(
-    `Pencarian tiket demo:\n${origin.value} → ${destination.value}\nTanggal: ${departureDate.value}\nPenumpang: ${passengers.value} dewasa`,
-  )
+  if (departureDate.value < today) {
+    alert('Tanggal keberangkatan tidak boleh di masa lalu.')
+    return
+  }
+
+  showOriginSuggestions.value = false
+  showDestinationSuggestions.value = false
+
+  router.push({
+    path: '/flights',
+    query: {
+      origin: cleanOrigin,
+      destination: cleanDestination,
+      departureDate: departureDate.value,
+      passengers: String(passengers.value),
+    },
+  })
 }
 
 const features = [
   {
-    icon: '♧',
+    icon: '✈',
     title: 'Tiket Penerbangan Terpercaya',
     description: 'Temukan harga terbaik dari berbagai maskapai.',
   },
@@ -75,10 +158,10 @@ const destinations = [
 </script>
 
 <template>
-  <div class="bg-[#dceafa]">
+  <div class="bg-[#dceafa">
     <!-- Hero -->
     <section
-      class="relative h-[472px] w-full items-start bg-cover bg-center"
+      class="relative h-[472px] w-full bg-cover bg-center"
       :style="{
         backgroundImage: `linear-gradient(rgba(38, 57, 81, 0.38), rgba(38, 57, 81, 0.38)), url('${heroImage}')`,
       }"
@@ -88,10 +171,12 @@ const destinations = [
           <h1 class="max-w-[520px] text-3xl font-semibold leading-tight sm:text-[34px]">
             Rencanakan perjalananmu dengan lebih mudah.
           </h1>
+
           <p class="mt-2 max-w-lg text-sm tracking-wide text-white/95">
             Temukan tiket penerbangan terbaik, dapatkan itinerary personal berbasis AI, dan siapkan
             packing list dalam satu platform.
           </p>
+
           <a
             href="#pencarian"
             class="mt-5 inline-flex rounded-full bg-[#347bd0] px-8 py-3 font-semibold text-white transition hover:bg-blue-700"
@@ -102,10 +187,10 @@ const destinations = [
       </div>
     </section>
 
-    <!-- Flight search -->
+    <!-- Flight Search -->
     <section
       id="pencarian"
-      class="relative z-10 mx-auto -mt-[124px] w-full max-w-[1440px] px-[3.2%]"
+      class="relative z-10 mx-auto -mt-[124px] w-full max-w-[1440px] scroll-mt-24 px-[3.2%]"
     >
       <div class="rounded-[24px] bg-[#f5f9ff] p-6 shadow-xl sm:px-6 sm:py-5">
         <div
@@ -118,49 +203,102 @@ const destinations = [
           class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_0.75fr]"
           @submit.prevent="searchFlights"
         >
-          <label class="rounded-xl border border-slate-200 p-3">
-            <span class="block text-xs font-medium text-slate-600">Kota Asal</span>
-            <span class="mt-2 flex items-center gap-2">
-              <span>⌖</span>
-              <input
-                v-model.trim="origin"
-                class="w-full min-w-0 bg-transparent text-sm outline-none"
-                placeholder="Kota asal"
-                required
-              />
-            </span>
-          </label>
+          <!-- Kota Asal -->
+          <div class="relative">
+            <label for="origin" class="block rounded-xl border border-slate-200 p-3">
+              <span class="block text-xs font-medium text-slate-600"> Kota Asal </span>
 
-          <label class="rounded-xl border border-slate-200 p-3">
-            <span class="block text-xs font-medium text-slate-600">Kota Tujuan</span>
-            <span class="mt-2 flex items-center gap-2">
-              <span>⌖</span>
-              <input
-                v-model.trim="destination"
-                class="w-full min-w-0 bg-transparent text-sm outline-none"
-                placeholder="Kota tujuan"
-                required
-              />
-            </span>
-          </label>
+              <span class="mt-2 flex items-center gap-2">
+                <span aria-hidden="true">⌖</span>
+                <input
+                  id="origin"
+                  v-model="origin"
+                  type="text"
+                  required
+                  autocomplete="off"
+                  class="w-full min-w-0 bg-transparent text-sm outline-none"
+                  placeholder="Ketik kota asal"
+                  @focus="showOriginSuggestions = true"
+                  @input="showOriginSuggestions = true"
+                />
+              </span>
+            </label>
 
+            <div
+              v-if="showOriginSuggestions && filteredOrigins.length"
+              class="absolute left-0 right-0 top-full z-50 mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
+            >
+              <button
+                v-for="city in filteredOrigins"
+                :key="city"
+                type="button"
+                class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                @mousedown.prevent="selectOrigin(city)"
+              >
+                <span aria-hidden="true">⌖</span>
+                {{ city }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Kota Tujuan -->
+          <div class="relative">
+            <label for="destination" class="block rounded-xl border border-slate-200 p-3">
+              <span class="block text-xs font-medium text-slate-600"> Kota Tujuan </span>
+
+              <span class="mt-2 flex items-center gap-2">
+                <span aria-hidden="true">⌖</span>
+                <input
+                  id="destination"
+                  v-model="destination"
+                  type="text"
+                  required
+                  autocomplete="off"
+                  class="w-full min-w-0 bg-transparent text-sm outline-none"
+                  placeholder="Ketik kota tujuan"
+                  @focus="showDestinationSuggestions = true"
+                  @input="showDestinationSuggestions = true"
+                />
+              </span>
+            </label>
+
+            <div
+              v-if="showDestinationSuggestions && filteredDestinations.length"
+              class="absolute left-0 right-0 top-full z-50 mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
+            >
+              <button
+                v-for="city in filteredDestinations"
+                :key="city"
+                type="button"
+                class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                @mousedown.prevent="selectDestination(city)"
+              >
+                <span aria-hidden="true">⌖</span>
+                {{ city }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Tanggal Keberangkatan -->
           <label class="rounded-xl border border-slate-200 p-3">
-            <span class="block text-xs font-medium text-slate-600">Tanggal Keberangkatan</span>
+            <span class="block text-xs font-medium text-slate-600"> Tanggal Keberangkatan </span>
             <input
               v-model="departureDate"
               type="date"
-              class="mt-2 w-full min-w-0 bg-transparent text-sm outline-none"
+              :min="today"
               required
+              class="mt-2 w-full min-w-0 cursor-pointer bg-transparent text-sm outline-none"
             />
           </label>
 
+          <!-- Jumlah Penumpang -->
           <label class="rounded-xl border border-slate-200 p-3">
-            <span class="block text-xs font-medium text-slate-600">Penumpang</span>
+            <span class="block text-xs font-medium text-slate-600"> Penumpang </span>
             <span class="mt-2 flex items-center gap-2">
-              <span>♙</span>
+              <span aria-hidden="true">♙</span>
               <select
                 v-model.number="passengers"
-                class="w-full bg-transparent text-sm outline-none"
+                class="w-full cursor-pointer bg-transparent text-sm outline-none"
               >
                 <option :value="1">1 Dewasa</option>
                 <option :value="2">2 Dewasa</option>
@@ -170,13 +308,19 @@ const destinations = [
               </select>
             </span>
           </label>
+
+          <!-- Cari Tiket -->
           <button
             type="submit"
-            class="flex min-h-[62px] items-center justify-center gap-2 rounded-xl bg-[#347bd0] px-4 font-semibold text-white transition hover:bg-blue-700"
+            class="flex min-h-[62px] items-center justify-center gap-2 rounded-xl bg-[#347bd0] px-4 font-semibold text-white transition hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
           >
-            Cari Tiket <span>⌕</span>
+            Cari Tiket <span aria-hidden="true">⌕</span>
           </button>
         </form>
+
+        <p class="mt-3 text-xs text-slate-500">
+          Ketik nama kota untuk melihat rekomendasi, atau masukkan nama kota secara manual.
+        </p>
       </div>
     </section>
 
@@ -228,16 +372,19 @@ const destinations = [
             class="h-24 w-full rounded-xl object-cover sm:h-28"
             src="https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?auto=format&fit=crop&w=600&q=80"
             alt="Pemandangan balon udara"
+            loading="lazy"
           />
           <img
             class="row-span-2 h-full min-h-52 w-full rounded-xl object-cover"
             src="https://images.unsplash.com/photo-1537996194471-e657df975ab4?auto=format&fit=crop&w=700&q=85"
             alt="Pemandangan pura di Bali"
+            loading="lazy"
           />
           <img
             class="h-24 w-full rounded-xl object-cover sm:h-28"
             src="https://images.unsplash.com/photo-1508804185872-d7badad00f7d?auto=format&fit=crop&w=600&q=80"
             alt="Bangunan bersejarah"
+            loading="lazy"
           />
         </div>
       </div>

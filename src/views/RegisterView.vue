@@ -10,10 +10,13 @@ const password = ref('')
 const confirmPassword = ref('')
 const errorMessage = ref('')
 const successMessage = ref('')
+const isSubmitting = ref(false)
 
 function register() {
   errorMessage.value = ''
   successMessage.value = ''
+
+  if (isSubmitting.value) return
 
   if (!name.value.trim() || !email.value.trim() || !password.value) {
     errorMessage.value = 'Semua kolom wajib diisi.'
@@ -30,27 +33,69 @@ function register() {
     return
   }
 
-  const users = JSON.parse(localStorage.getItem('tripmate-users') || '[]')
   const normalizedEmail = email.value.trim().toLowerCase()
 
-  if (users.some((user) => user.email === normalizedEmail)) {
+  let users
+
+  try {
+    const storedUsers = JSON.parse(localStorage.getItem('tripmate-users') || '[]')
+
+    if (!Array.isArray(storedUsers)) {
+      errorMessage.value = 'Data akun tidak valid. Silakan periksa kembali.'
+      return
+    }
+
+    users = storedUsers
+  } catch {
+    errorMessage.value = 'Data akun tidak dapat dibaca. Silakan coba lagi.'
+    return
+  }
+
+  const emailExists = users.some(
+    (user) => typeof user.email === 'string' && user.email.trim().toLowerCase() === normalizedEmail,
+  )
+
+  if (emailExists) {
     errorMessage.value = 'Email ini sudah terdaftar.'
     return
   }
 
-  users.push({
+  const newUser = {
     id: Date.now(),
     name: name.value.trim(),
     email: normalizedEmail,
     password: password.value,
-  })
+  }
 
-  localStorage.setItem('tripmate-users', JSON.stringify(users))
+  try {
+    users.push(newUser)
+
+    localStorage.setItem('tripmate-users', JSON.stringify(users))
+
+    // Pastikan akun berhasil disimpan
+    const savedUsers = JSON.parse(localStorage.getItem('tripmate-users') || '[]')
+
+    const savedSuccessfully = savedUsers.some(
+      (user) => user.id === newUser.id && user.email === normalizedEmail,
+    )
+
+    if (!savedSuccessfully) {
+      errorMessage.value = 'Pendaftaran gagal disimpan. Silakan coba lagi.'
+      return
+    }
+  } catch {
+    errorMessage.value = 'Pendaftaran gagal disimpan. Silakan coba lagi.'
+    return
+  }
+
   successMessage.value = 'Pendaftaran berhasil! Silakan masuk.'
+  isSubmitting.value = true
 
-  setTimeout(() => {
-    router.push('/login')
-  }, 1000)
+  // Registrasi tidak otomatis login
+  router.replace({ name: 'login' }).catch(() => {
+    isSubmitting.value = false
+    errorMessage.value = 'Gagal membuka halaman Login. Silakan klik Masuk.'
+  })
 }
 </script>
 
@@ -61,13 +106,16 @@ function register() {
         <p class="text-sm font-semibold uppercase tracking-[0.2em] text-[#347bd0]">
           Mulai Bersama TripMate
         </p>
+
         <h1 class="mt-3 text-3xl font-bold text-[#263951]">Buat Akun</h1>
+
         <p class="mt-2 text-sm text-slate-600">Daftar untuk mulai merencanakan perjalananmu.</p>
       </div>
 
       <form class="space-y-4" @submit.prevent="register">
         <label class="block">
-          <span class="mb-2 block text-sm font-medium text-[#263951]">Nama lengkap</span>
+          <span class="mb-2 block text-sm font-medium text-[#263951]"> Nama lengkap </span>
+
           <input
             v-model="name"
             type="text"
@@ -79,7 +127,8 @@ function register() {
         </label>
 
         <label class="block">
-          <span class="mb-2 block text-sm font-medium text-[#263951]">Email</span>
+          <span class="mb-2 block text-sm font-medium text-[#263951]"> Email </span>
+
           <input
             v-model="email"
             type="email"
@@ -91,7 +140,8 @@ function register() {
         </label>
 
         <label class="block">
-          <span class="mb-2 block text-sm font-medium text-[#263951]">Kata sandi</span>
+          <span class="mb-2 block text-sm font-medium text-[#263951]"> Kata sandi </span>
+
           <input
             v-model="password"
             type="password"
@@ -104,7 +154,8 @@ function register() {
         </label>
 
         <label class="block">
-          <span class="mb-2 block text-sm font-medium text-[#263951]">Konfirmasi kata sandi</span>
+          <span class="mb-2 block text-sm font-medium text-[#263951]"> Konfirmasi kata sandi </span>
+
           <input
             v-model="confirmPassword"
             type="password"
@@ -130,14 +181,16 @@ function register() {
 
         <button
           type="submit"
-          class="w-full rounded-xl bg-[#347bd0] px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
+          :disabled="isSubmitting"
+          class="w-full rounded-xl bg-[#347bd0] px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Daftar Sekarang
+          {{ isSubmitting ? 'Pendaftaran Berhasil' : 'Daftar Sekarang' }}
         </button>
       </form>
 
       <p class="mt-6 text-center text-sm text-slate-600">
         Sudah punya akun?
+
         <RouterLink to="/login" class="font-semibold text-[#347bd0] hover:underline">
           Masuk
         </RouterLink>
