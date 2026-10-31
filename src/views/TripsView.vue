@@ -1,13 +1,15 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 
 const STORAGE_KEY = 'tripmate-trips'
+
+const currentUser = JSON.parse(localStorage.getItem('tripmate-current-user') || 'null')
 
 const showForm = ref(false)
 const message = ref('')
 const editingId = ref(null)
-
 const trips = ref([])
+
 const form = ref({
   name: '',
   destination: '',
@@ -41,6 +43,15 @@ const formTitle = computed(() =>
   editingId.value === null ? 'Tambah Perjalanan' : 'Edit Perjalanan',
 )
 
+// Perjalanan milik pengguna yang sedang login
+const userTrips = computed(() => {
+  if (!currentUser?.id) return []
+
+  return trips.value.filter((trip) => String(trip.userId) === String(currentUser.id))
+})
+
+const tripCount = computed(() => userTrips.value.length)
+
 function resetForm() {
   form.value = {
     name: '',
@@ -49,8 +60,41 @@ function resetForm() {
     endDate: '',
     notes: '',
   }
+
   editingId.value = null
   message.value = ''
+}
+
+// Mengambil destinasi pilihan dari halaman Destinasi
+function loadSelectedDestination() {
+  try {
+    const savedDestination = localStorage.getItem('tripmate-selected-destination')
+
+    if (!savedDestination) return
+
+    const destination = JSON.parse(savedDestination)
+
+    if (!destination?.name) return
+
+    // Pastikan pengguna sudah login
+    if (!currentUser?.id) {
+      message.value = 'Silakan login terlebih dahulu untuk membuat perjalanan.'
+      localStorage.removeItem('tripmate-selected-destination')
+      return
+    }
+
+    resetForm()
+
+    form.value.destination = destination.name
+    showForm.value = true
+
+    message.value = `Destinasi ${destination.name} berhasil dipilih. Lengkapi data perjalananmu.`
+
+    // Hapus pilihan setelah berhasil dibaca
+    localStorage.removeItem('tripmate-selected-destination')
+  } catch {
+    localStorage.removeItem('tripmate-selected-destination')
+  }
 }
 
 function toggleForm() {
@@ -65,6 +109,11 @@ function toggleForm() {
 }
 
 function saveTrip() {
+  if (!currentUser?.id) {
+    message.value = 'Silakan login terlebih dahulu.'
+    return
+  }
+
   const name = form.value.name.trim()
   const destination = form.value.destination.trim()
 
@@ -79,25 +128,33 @@ function saveTrip() {
   }
 
   if (editingId.value !== null) {
-    const index = trips.value.findIndex((trip) => trip.id === editingId.value)
+    const index = trips.value.findIndex(
+      (trip) => trip.id === editingId.value && String(trip.userId) === String(currentUser.id),
+    )
 
-    if (index !== -1) {
-      trips.value[index] = {
-        ...trips.value[index],
-        ...form.value,
-        name,
-        destination,
-      }
-      message.value = 'Perjalanan berhasil diperbarui!'
+    if (index === -1) {
+      message.value = 'Perjalanan tidak ditemukan.'
+      return
     }
+
+    trips.value[index] = {
+      ...trips.value[index],
+      ...form.value,
+      name,
+      destination,
+    }
+
+    message.value = 'Perjalanan berhasil diperbarui!'
   } else {
     trips.value.push({
       id: Date.now(),
+      userId: currentUser.id,
       ...form.value,
       name,
       destination,
       createdAt: new Date().toISOString(),
     })
+
     message.value = 'Perjalanan berhasil ditambahkan!'
   }
 
@@ -106,7 +163,13 @@ function saveTrip() {
 }
 
 function editTrip(trip) {
+  if (String(trip.userId) !== String(currentUser?.id)) {
+    message.value = 'Kamu tidak memiliki akses ke perjalanan ini.'
+    return
+  }
+
   editingId.value = trip.id
+
   form.value = {
     name: trip.name,
     destination: trip.destination,
@@ -114,17 +177,31 @@ function editTrip(trip) {
     endDate: trip.endDate,
     notes: trip.notes || '',
   }
+
   message.value = ''
   showForm.value = true
+
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 function deleteTrip(id) {
+  const trip = trips.value.find(
+    (item) => item.id === id && String(item.userId) === String(currentUser?.id),
+  )
+
+  if (!trip) {
+    message.value = 'Perjalanan tidak ditemukan.'
+    return
+  }
+
   const confirmed = window.confirm('Yakin ingin menghapus perjalanan ini?')
 
   if (!confirmed) return
 
-  trips.value = trips.value.filter((trip) => trip.id !== id)
+  trips.value = trips.value.filter(
+    (item) => !(item.id === id && String(item.userId) === String(currentUser?.id)),
+  )
+
   message.value = 'Perjalanan berhasil dihapus.'
 }
 
@@ -139,6 +216,7 @@ function formatDate(dateString) {
 }
 
 loadTrips()
+onMounted(loadSelectedDestination)
 </script>
 
 <template>
@@ -147,7 +225,9 @@ loadTrips()
       <div class="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
         <div>
           <p class="mb-2 text-sm font-semibold uppercase tracking-widest text-blue-600">My Trip</p>
+
           <h1 class="text-3xl font-bold text-[#263951] sm:text-4xl">Perjalanan Saya</h1>
+
           <p class="mt-3 max-w-xl text-sm leading-relaxed text-slate-600">
             Atur semua rencana perjalananmu di satu tempat bersama TripMate.
           </p>
@@ -170,6 +250,7 @@ loadTrips()
         {{ message }}
       </div>
 
+      <!-- Form Perjalanan -->
       <section v-if="showForm" class="mt-8 rounded-2xl bg-[#f5f9ff] p-5 shadow-sm sm:p-8">
         <h2 class="text-xl font-bold text-[#263951]">
           {{ formTitle }}
@@ -179,6 +260,7 @@ loadTrips()
           <div class="grid gap-5 sm:grid-cols-2">
             <label class="block">
               <span class="mb-2 block text-sm font-medium text-slate-700"> Nama perjalanan </span>
+
               <input
                 v-model="form.name"
                 type="text"
@@ -191,6 +273,7 @@ loadTrips()
 
             <label class="block">
               <span class="mb-2 block text-sm font-medium text-slate-700"> Destinasi </span>
+
               <input
                 v-model="form.destination"
                 type="text"
@@ -203,6 +286,7 @@ loadTrips()
 
             <label class="block">
               <span class="mb-2 block text-sm font-medium text-slate-700"> Tanggal mulai </span>
+
               <input
                 v-model="form.startDate"
                 type="date"
@@ -213,6 +297,7 @@ loadTrips()
 
             <label class="block">
               <span class="mb-2 block text-sm font-medium text-slate-700"> Tanggal selesai </span>
+
               <input
                 v-model="form.endDate"
                 type="date"
@@ -227,6 +312,7 @@ loadTrips()
             <span class="mb-2 block text-sm font-medium text-slate-700">
               Catatan perjalanan (opsional)
             </span>
+
             <textarea
               v-model="form.notes"
               rows="3"
@@ -255,21 +341,26 @@ loadTrips()
         </form>
       </section>
 
+      <!-- Daftar Perjalanan -->
       <section class="mt-8">
         <div class="mb-5 flex items-center justify-between">
           <h2 class="text-xl font-bold text-[#263951]">Daftar Perjalanan</h2>
+
           <span class="rounded-full bg-white px-4 py-2 text-sm font-medium text-blue-700">
-            {{ trips.length }} trip
+            {{ tripCount }} trip
           </span>
         </div>
 
         <div
-          v-if="trips.length === 0"
+          v-if="userTrips.length === 0"
           class="rounded-2xl border border-dashed border-blue-200 bg-white/70 px-5 py-14 text-center"
         >
           <div class="text-5xl" aria-hidden="true">✈</div>
+
           <h3 class="mt-4 text-lg font-bold text-[#263951]">Belum ada perjalanan</h3>
+
           <p class="mt-2 text-sm text-slate-600">Yuk, buat rencana perjalanan pertamamu!</p>
+
           <button
             type="button"
             class="mt-5 rounded-xl bg-[#347bd0] px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
@@ -281,7 +372,7 @@ loadTrips()
 
         <div v-else class="grid gap-5 md:grid-cols-2">
           <article
-            v-for="trip in trips"
+            v-for="trip in userTrips"
             :key="trip.id"
             class="rounded-2xl border border-white bg-[#f5f9ff] p-5 shadow-sm transition hover:shadow-md sm:p-6"
           >
@@ -290,19 +381,23 @@ loadTrips()
                 <span class="text-xs font-semibold uppercase tracking-wider text-blue-600">
                   Rencana Perjalanan
                 </span>
+
                 <h3 class="mt-2 text-xl font-bold text-[#263951]">
                   {{ trip.name }}
                 </h3>
+
                 <p class="mt-1 text-sm text-slate-600">
                   <span aria-hidden="true">📍</span>
                   {{ trip.destination }}
                 </p>
               </div>
+
               <span class="text-2xl" aria-hidden="true">🧳</span>
             </div>
 
             <div class="mt-5 rounded-xl bg-blue-50 p-4">
               <p class="text-xs font-medium text-slate-500">Tanggal perjalanan</p>
+
               <p class="mt-1 text-sm font-semibold text-[#263951]">
                 {{ formatDate(trip.startDate) }}
                 <span class="px-1 text-blue-500">→</span>
@@ -325,6 +420,7 @@ loadTrips()
               >
                 Edit
               </button>
+
               <button
                 type="button"
                 class="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50"

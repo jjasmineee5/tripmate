@@ -108,6 +108,13 @@ onUnmounted(() => {
               Hai, {{ currentUser.name }}
             </span>
 
+            <RouterLink
+              to="/profile"
+              class="rounded-full border border-[#347bd0] px-5 py-2 text-sm text-[#347bd0] transition hover:bg-blue-50"
+            >
+              Profil Saya
+            </RouterLink>
+
             <button
               type="button"
               class="rounded-full border border-[#347bd0] px-5 py-2 text-sm text-[#347bd0] transition hover:bg-blue-50"
@@ -163,6 +170,14 @@ onUnmounted(() => {
             <div class="px-3 py-3 text-sm font-semibold text-[#263951]">
               Hai, {{ currentUser.name }}
             </div>
+
+            <RouterLink
+              to="/profile"
+              class="rounded-lg px-3 py-3 text-sm text-[#347bd0] hover:bg-blue-50"
+              @click="menuOpen = false"
+            >
+              Profil Saya
+            </RouterLink>
 
             <button
               type="button"

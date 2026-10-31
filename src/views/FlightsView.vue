@@ -28,6 +28,7 @@ const sampleFlights = [
     arrival: '09:35',
     duration: '1j 35m',
     price: 1250000,
+    class: 'Business',
   },
   {
     id: 2,
@@ -37,6 +38,7 @@ const sampleFlights = [
     arrival: '12:05',
     duration: '1j 35m',
     price: 890000,
+    class: 'Economy',
   },
   {
     id: 3,
@@ -46,6 +48,7 @@ const sampleFlights = [
     arrival: '15:55',
     duration: '1j 40m',
     price: 750000,
+    class: 'Economy',
   },
 ]
 
@@ -53,14 +56,36 @@ const searched = ref(true)
 const stage = ref('outbound')
 const selectedOutbound = ref(null)
 
-const filteredFlights = computed(() =>
-  searched.value
-    ? sampleFlights.map((flight) => ({
-        ...flight,
-        totalPrice: flight.price * passengers.value,
-      }))
-    : [],
-)
+// Filter penerbangan
+const selectedAirline = ref('Semua')
+const minPrice = ref(0)
+const maxPrice = ref(2000000)
+const selectedClass = ref('Semua')
+
+const airlines = computed(() => [
+  'Semua',
+  ...new Set(sampleFlights.map((flight) => flight.airline)),
+])
+
+const filteredFlights = computed(() => {
+  if (!searched.value) return []
+
+  return sampleFlights
+    .filter((flight) => {
+      const matchesAirline =
+        selectedAirline.value === 'Semua' || flight.airline === selectedAirline.value
+
+      const matchesPrice = flight.price >= minPrice.value && flight.price <= maxPrice.value
+
+      const matchesClass = selectedClass.value === 'Semua' || flight.class === selectedClass.value
+
+      return matchesAirline && matchesPrice && matchesClass
+    })
+    .map((flight) => ({
+      ...flight,
+      totalPrice: flight.price * passengers.value,
+    }))
+})
 
 function formatPrice(price) {
   return new Intl.NumberFormat('id-ID', {
@@ -80,9 +105,21 @@ function formatDate(dateString) {
   })
 }
 
+function resetFilters() {
+  selectedAirline.value = 'Semua'
+  minPrice.value = 0
+  maxPrice.value = 2000000
+  selectedClass.value = 'Semua'
+}
+
 function searchFlights() {
   if (!origin.value || !destination.value || !departureDate.value) {
     alert('Lengkapi kota asal, kota tujuan, dan tanggal keberangkatan.')
+    return
+  }
+
+  if (!cities.includes(origin.value) || !cities.includes(destination.value)) {
+    alert('Pilih kota asal dan tujuan yang tersedia.')
     return
   }
 
@@ -101,10 +138,15 @@ function searchFlights() {
     return
   }
 
+  if (!Number.isInteger(passengers.value) || passengers.value < 1 || passengers.value > 5) {
+    alert('Jumlah penumpang harus antara 1 sampai 5 orang.')
+    return
+  }
+
   selectedOutbound.value = null
   stage.value = 'outbound'
+  resetFilters()
 
-  // Hapus tiket pilihan lama saat memulai pencarian baru.
   localStorage.removeItem('tripmate-selected-flight')
 
   router.replace({
@@ -172,11 +214,9 @@ function chooseFlight(flight) {
   if (stage.value === 'outbound') {
     selectedOutbound.value = { ...flight }
 
-    // Jika tidak ada tanggal pulang, langsung lanjut ke detail tiket.
     if (!returnDate.value) {
       saveSelection()
     } else {
-      // Pengguna bisa memilih tiket pulang atau melewatinya.
       stage.value = 'return'
     }
 
@@ -188,8 +228,6 @@ function chooseFlight(flight) {
 
 function continueWithoutReturn() {
   if (!selectedOutbound.value) return
-
-  // Simpan hanya tiket pergi meskipun tanggal pulang telah diisi.
   saveSelection(null)
 }
 
@@ -210,6 +248,7 @@ function changeOutbound() {
         ← Kembali ke Beranda
       </button>
 
+      <!-- Form Pencarian -->
       <section class="rounded-3xl bg-white p-6 shadow-sm sm:p-8">
         <p class="text-sm font-semibold text-blue-600">TRIPMATE FLIGHT SEARCH</p>
 
@@ -294,6 +333,82 @@ function changeOutbound() {
         </form>
       </section>
 
+      <!-- Filter Penerbangan -->
+      <section class="mt-6 rounded-2xl bg-white p-5 shadow-sm sm:p-6">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-bold text-[#263a53]">Filter Penerbangan</h2>
+            <p class="mt-1 text-sm text-slate-500">Sesuaikan hasil pencarian dengan kebutuhanmu.</p>
+          </div>
+
+          <button
+            type="button"
+            class="text-sm font-semibold text-blue-700 hover:text-blue-900"
+            @click="resetFilters"
+          >
+            Reset Filter
+          </button>
+        </div>
+
+        <div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <label class="text-sm font-medium text-slate-700">
+            Maskapai
+
+            <select
+              v-model="selectedAirline"
+              class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3"
+            >
+              <option v-for="airline in airlines" :key="airline" :value="airline">
+                {{ airline }}
+              </option>
+            </select>
+          </label>
+
+          <label class="text-sm font-medium text-slate-700">
+            Kelas Penerbangan
+
+            <select
+              v-model="selectedClass"
+              class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3"
+            >
+              <option value="Semua">Semua Kelas</option>
+              <option value="Economy">Economy</option>
+              <option value="Business">Business</option>
+            </select>
+          </label>
+
+          <div class="text-sm font-medium text-slate-700 sm:col-span-2 lg:col-span-1">
+            <label for="min-price">Rentang Harga (per orang)</label>
+
+            <div class="mt-2 grid grid-cols-2 gap-2">
+              <input
+                id="min-price"
+                v-model.number="minPrice"
+                type="number"
+                min="0"
+                :max="maxPrice"
+                placeholder="Minimum"
+                class="min-w-0 rounded-xl border border-slate-300 p-3"
+              />
+
+              <input
+                v-model.number="maxPrice"
+                type="number"
+                :min="minPrice"
+                max="100000000"
+                placeholder="Maksimum"
+                class="min-w-0 rounded-xl border border-slate-300 p-3"
+              />
+            </div>
+          </div>
+        </div>
+
+        <p class="mt-4 text-xs text-slate-500">
+          Harga yang ditampilkan merupakan harga simulasi per penumpang.
+        </p>
+      </section>
+
+      <!-- Hasil Penerbangan -->
       <section class="mt-8">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -325,7 +440,7 @@ function changeOutbound() {
           Daftar dan harga penerbangan merupakan data simulasi, bukan jadwal atau harga real-time.
         </div>
 
-        <div class="space-y-4">
+        <div v-if="filteredFlights.length > 0" class="space-y-4">
           <article
             v-for="flight in filteredFlights"
             :key="flight.id"
@@ -340,9 +455,15 @@ function changeOutbound() {
                 {{ flight.code }}
               </p>
 
-              <p class="mt-3 text-sm text-slate-600">
-                {{ flight.duration }} · Penerbangan langsung
-              </p>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                  {{ flight.class }}
+                </span>
+
+                <span class="text-sm text-slate-600">
+                  {{ flight.duration }} · Penerbangan langsung
+                </span>
+              </div>
             </div>
 
             <div class="flex items-center justify-between gap-4 sm:justify-center">
@@ -392,6 +513,26 @@ function changeOutbound() {
           </article>
         </div>
 
+        <div
+          v-else
+          class="rounded-2xl border border-dashed border-blue-200 bg-white p-10 text-center"
+        >
+          <h3 class="font-bold text-[#263a53]">Tidak ada penerbangan yang sesuai</h3>
+
+          <p class="mt-2 text-sm text-slate-500">
+            Coba ubah filter maskapai, kelas, atau rentang harga.
+          </p>
+
+          <button
+            type="button"
+            class="mt-4 rounded-xl bg-[#347bd0] px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700"
+            @click="resetFilters"
+          >
+            Reset Filter
+          </button>
+        </div>
+
+        <!-- Ringkasan Tiket Pergi -->
         <div
           v-if="stage === 'return' && selectedOutbound"
           class="mt-5 rounded-xl border border-blue-100 bg-white p-4"

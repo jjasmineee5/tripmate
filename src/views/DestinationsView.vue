@@ -1,4 +1,3 @@
-```vue
 <script setup>
 import { computed, ref } from 'vue'
 
@@ -89,9 +88,7 @@ function planTrip(destination) {
     }),
   )
 
-  window.alert(
-    `Destinasi ${destination.name} tersimpan. Kamu bisa menggunakannya saat merencanakan perjalanan.`,
-  )
+  window.location.href = '/trips'
 }
 
 function resetSearch() {
@@ -107,12 +104,15 @@ function resetSearch() {
         <p class="text-sm font-semibold uppercase tracking-widest text-[#347bd0]">
           Temukan tempat baru
         </p>
+
         <h1 class="mt-2 text-3xl font-bold text-[#263951] sm:text-4xl">Jelajahi Destinasi</h1>
+
         <p class="mx-auto mt-3 max-w-2xl text-[#52657d]">
           Temukan inspirasi liburan dan pilih destinasi yang ingin kamu kunjungi bersama TripMate.
         </p>
       </div>
 
+      <!-- Pencarian dan Kategori -->
       <section class="mb-8 rounded-2xl bg-[#f5f9ff] p-5 shadow-sm sm:p-6">
         <label class="mb-2 block text-sm font-semibold text-[#263951]" for="destination-search">
           Cari destinasi
@@ -144,8 +144,10 @@ function resetSearch() {
         </div>
       </section>
 
+      <!-- Daftar Destinasi -->
       <div class="mb-5 flex items-center justify-between gap-3">
         <h2 class="text-xl font-bold text-[#263951]">Inspirasi perjalanan</h2>
+
         <p class="text-sm text-[#52657d]">{{ filteredDestinations.length }} destinasi</p>
       </div>
 
@@ -168,6 +170,7 @@ function resetSearch() {
                 <h3 class="text-xl font-bold text-[#263951]">
                   {{ destination.name }}
                 </h3>
+
                 <p class="mt-1 text-sm text-slate-500">
                   {{ destination.location }}
                 </p>
@@ -195,8 +198,10 @@ function resetSearch() {
         </article>
       </div>
 
+      <!-- Jika Tidak Ditemukan -->
       <div v-else class="rounded-2xl bg-[#f5f9ff] p-10 text-center">
         <h3 class="text-lg font-bold text-[#263951]">Destinasi tidak ditemukan</h3>
+
         <p class="mt-2 text-sm text-slate-500">Coba kata kunci atau kategori yang berbeda.</p>
 
         <button

@@ -25,13 +25,15 @@ function login() {
   const normalizedEmail = email.value.trim().toLowerCase()
 
   const user = users.find(
-    (item) =>
-      typeof item.email === 'string' &&
-      item.email.trim().toLowerCase() === normalizedEmail &&
-      item.password === password.value,
+    (item) => typeof item.email === 'string' && item.email.trim().toLowerCase() === normalizedEmail,
   )
 
   if (!user) {
+    errorMessage.value = 'Email belum terdaftar. Silakan daftar akun terlebih dahulu.'
+    return
+  }
+
+  if (user.password !== password.value) {
     errorMessage.value = 'Email atau kata sandi salah.'
     return
   }

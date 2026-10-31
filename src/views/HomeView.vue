@@ -13,6 +13,45 @@ const passengers = ref(1)
 const showOriginSuggestions = ref(false)
 const showDestinationSuggestions = ref(false)
 
+// Data pengguna dan riwayat perjalanan
+const currentUser = ref(null)
+const trips = ref([])
+
+try {
+  const savedUser = localStorage.getItem('tripmate-current-user')
+  const savedTrips = localStorage.getItem('tripmate-trips')
+
+  currentUser.value = savedUser ? JSON.parse(savedUser) : null
+
+  const parsedTrips = savedTrips ? JSON.parse(savedTrips) : []
+  trips.value = Array.isArray(parsedTrips) ? parsedTrips : []
+} catch {
+  currentUser.value = null
+  trips.value = []
+}
+
+// Perjalanan milik pengguna yang sedang login
+const myTrips = computed(() => {
+  if (!currentUser.value?.id) return []
+
+  return trips.value
+    .filter((trip) => String(trip.userId) === String(currentUser.value.id))
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+})
+
+// Maksimal tiga perjalanan terbaru
+const latestTrips = computed(() => myTrips.value.slice(0, 3))
+
+function formatDate(date) {
+  if (!date) return '-'
+
+  return new Date(date).toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
 const cities = [
   'Balikpapan',
   'Samarinda',
@@ -158,7 +197,7 @@ const destinations = [
 </script>
 
 <template>
-  <div class="bg-[#dceafa">
+  <div class="bg-[#dceafa]">
     <!-- Hero -->
     <section
       class="relative h-[472px] w-full bg-cover bg-center"
@@ -206,7 +245,7 @@ const destinations = [
           <!-- Kota Asal -->
           <div class="relative">
             <label for="origin" class="block rounded-xl border border-slate-200 p-3">
-              <span class="block text-xs font-medium text-slate-600"> Kota Asal </span>
+              <span class="block text-xs font-medium text-slate-600">Kota Asal</span>
 
               <span class="mt-2 flex items-center gap-2">
                 <span aria-hidden="true">⌖</span>
@@ -244,7 +283,7 @@ const destinations = [
           <!-- Kota Tujuan -->
           <div class="relative">
             <label for="destination" class="block rounded-xl border border-slate-200 p-3">
-              <span class="block text-xs font-medium text-slate-600"> Kota Tujuan </span>
+              <span class="block text-xs font-medium text-slate-600">Kota Tujuan</span>
 
               <span class="mt-2 flex items-center gap-2">
                 <span aria-hidden="true">⌖</span>
@@ -281,7 +320,7 @@ const destinations = [
 
           <!-- Tanggal Keberangkatan -->
           <label class="rounded-xl border border-slate-200 p-3">
-            <span class="block text-xs font-medium text-slate-600"> Tanggal Keberangkatan </span>
+            <span class="block text-xs font-medium text-slate-600">Tanggal Keberangkatan</span>
             <input
               v-model="departureDate"
               type="date"
@@ -293,7 +332,7 @@ const destinations = [
 
           <!-- Jumlah Penumpang -->
           <label class="rounded-xl border border-slate-200 p-3">
-            <span class="block text-xs font-medium text-slate-600"> Penumpang </span>
+            <span class="block text-xs font-medium text-slate-600">Penumpang</span>
             <span class="mt-2 flex items-center gap-2">
               <span aria-hidden="true">♙</span>
               <select
@@ -321,6 +360,77 @@ const destinations = [
         <p class="mt-3 text-xs text-slate-500">
           Ketik nama kota untuk melihat rekomendasi, atau masukkan nama kota secara manual.
         </p>
+      </div>
+    </section>
+
+    <!-- Ringkasan Perjalanan -->
+    <section v-if="currentUser" class="mx-auto max-w-7xl px-6 pb-4 pt-10 lg:px-10">
+      <div class="rounded-2xl bg-white p-6 shadow-md sm:p-8">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p class="text-sm font-semibold uppercase tracking-wider text-[#347bd0]">
+              Aktivitas Saya
+            </p>
+            <h2 class="mt-1 text-2xl font-bold text-[#263a53]">Ringkasan Perjalanan</h2>
+            <p class="mt-1 text-sm text-slate-500">
+              Halo, {{ currentUser.name || 'Traveler' }}! Ini perjalananmu di TripMate.
+            </p>
+          </div>
+
+          <div class="rounded-xl bg-blue-50 px-5 py-3 text-center">
+            <p class="text-3xl font-bold text-[#347bd0]">
+              {{ myTrips.length }}
+            </p>
+            <p class="text-xs font-medium text-slate-600">Total Perjalanan</p>
+          </div>
+        </div>
+
+        <div v-if="latestTrips.length > 0" class="mt-6 grid gap-4 md:grid-cols-3">
+          <article
+            v-for="trip in latestTrips"
+            :key="trip.id"
+            class="rounded-xl border border-slate-200 p-5 transition hover:border-[#347bd0]"
+          >
+            <h3 class="font-bold text-[#263a53]">
+              {{ trip.name }}
+            </h3>
+
+            <p class="mt-1 text-sm font-medium text-[#347bd0]">
+              {{ trip.destination }}
+            </p>
+
+            <div class="mt-3 space-y-1 text-xs text-slate-500">
+              <p>
+                <span class="font-semibold">Mulai:</span>
+                {{ formatDate(trip.startDate) }}
+              </p>
+              <p>
+                <span class="font-semibold">Selesai:</span>
+                {{ formatDate(trip.endDate) }}
+              </p>
+            </div>
+          </article>
+        </div>
+
+        <div
+          v-else
+          class="mt-6 rounded-xl border border-dashed border-slate-300 px-5 py-8 text-center"
+        >
+          <p class="font-semibold text-slate-600">Kamu belum memiliki perjalanan.</p>
+          <p class="mt-1 text-sm text-slate-500">
+            Mulai buat rencana perjalanan pertamamu sekarang!
+          </p>
+        </div>
+
+        <div class="mt-6">
+          <button
+            type="button"
+            class="rounded-lg bg-[#347bd0] px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+            @click="router.push('/trips')"
+          >
+            Lihat Semua Perjalanan →
+          </button>
+        </div>
       </div>
     </section>
 
