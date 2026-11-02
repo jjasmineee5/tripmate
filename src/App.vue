@@ -11,8 +11,8 @@ const currentUser = ref(null)
 const navLinks = [
   { label: 'Beranda', path: '/' },
   { label: 'Cari Tiket', path: '/flights' },
-  { label: 'Itinerary', path: '/itinerary' },
-  { label: 'Packing List', path: '/packing-list' },
+  { label: 'Rencana Perjalanan', path: '/itinerary' },
+  { label: 'Daftar Perlengkapan', path: '/packing-list' },
   { label: 'Destinasi', path: '/destinations' },
 ]
 
@@ -92,7 +92,7 @@ onUnmounted(() => {
               to="/login"
               class="rounded-full border border-[#347bd0] px-6 py-2 text-sm text-[#347bd0] transition hover:bg-blue-50"
             >
-              Login
+              Masuk
             </RouterLink>
 
             <RouterLink
@@ -154,7 +154,7 @@ onUnmounted(() => {
               class="rounded-lg px-3 py-3 text-sm hover:bg-blue-50"
               @click="menuOpen = false"
             >
-              Login
+              Masuk
             </RouterLink>
 
             <RouterLink
@@ -250,7 +250,7 @@ onUnmounted(() => {
       <div
         class="mx-auto w-full max-w-[1200px] border-t border-white/20 px-5 py-5 text-center text-sm text-blue-100"
       >
-        © 2026 TripMate. All rights reserved.
+        © 2026 TripMate. Hak cipta dilindungi.
       </div>
     </footer>
   </div>

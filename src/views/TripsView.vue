@@ -224,7 +224,9 @@ onMounted(loadSelectedDestination)
     <section class="mx-auto w-full max-w-6xl px-5 py-12 sm:px-8">
       <div class="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
         <div>
-          <p class="mb-2 text-sm font-semibold uppercase tracking-widest text-blue-600">My Trip</p>
+          <p class="mb-2 text-sm font-semibold uppercase tracking-widest text-blue-600">
+            Perjalanan Saya
+          </p>
 
           <h1 class="text-3xl font-bold text-[#263951] sm:text-4xl">Perjalanan Saya</h1>
 
@@ -238,7 +240,7 @@ onMounted(loadSelectedDestination)
           class="rounded-xl bg-[#347bd0] px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
           @click="toggleForm"
         >
-          {{ showForm ? 'Batal' : '+ Tambah Trip' }}
+          {{ showForm ? 'Batal' : '+ Tambah Perjalanan' }}
         </button>
       </div>
 
@@ -347,7 +349,7 @@ onMounted(loadSelectedDestination)
           <h2 class="text-xl font-bold text-[#263951]">Daftar Perjalanan</h2>
 
           <span class="rounded-full bg-white px-4 py-2 text-sm font-medium text-blue-700">
-            {{ tripCount }} trip
+            {{ tripCount }} perjalanan
           </span>
         </div>
 

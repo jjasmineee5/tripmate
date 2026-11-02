@@ -111,7 +111,7 @@ function loadLinkedContext() {
     itinerary,
   }
 
-  // Utamakan data itinerary karena biasanya mencerminkan
+  // Utamakan data rencana perjalanan karena biasanya mencerminkan
   // rencana perjalanan yang sudah dibuat pengguna.
   const selectedDestination = itinerary?.destination || flight?.destination || ''
 
@@ -120,7 +120,6 @@ function loadLinkedContext() {
   }
 
   const itineraryDuration = getDuration(itinerary?.startDate, itinerary?.endDate)
-
   const flightDuration = getDuration(flight?.departureDate, flight?.returnDate)
 
   if (itineraryDuration) {
@@ -163,7 +162,7 @@ watch(
     try {
       localStorage.setItem(storageKey, JSON.stringify(value))
     } catch {
-      errorMessage.value = 'Daftar tidak dapat disimpan di browser.'
+      errorMessage.value = 'Daftar perlengkapan tidak dapat disimpan di browser.'
     }
   },
   { deep: true },
@@ -194,7 +193,7 @@ async function generatePackingList() {
     return
   }
 
-  // Muat ulang data supaya perubahan tiket atau itinerary
+  // Muat ulang data supaya perubahan tiket atau rencana perjalanan
   // yang dibuat setelah halaman dibuka ikut terbaca.
   loadLinkedContext()
   isGenerating.value = true
@@ -217,7 +216,7 @@ async function generatePackingList() {
     const data = await response.json().catch(() => ({}))
 
     if (!response.ok) {
-      throw new Error(data.message || 'Gagal menghasilkan packing list.')
+      throw new Error(data.message || 'Gagal membuat daftar perlengkapan.')
     }
 
     const generatedItems = Array.isArray(data.items)
@@ -249,11 +248,11 @@ async function generatePackingList() {
 
     const sources = []
     if (linkedContext.value.hasFlight) sources.push('tiket')
-    if (linkedContext.value.hasItinerary) sources.push('itinerary')
+    if (linkedContext.value.hasItinerary) sources.push('rencana perjalanan')
 
     successMessage.value = sources.length
-      ? `Berhasil membuat ${normalizedItems.length} barang dengan konteks ${sources.join(' dan ')} perjalanan.`
-      : `Berhasil membuat ${normalizedItems.length} barang berdasarkan tujuan, durasi, dan jenis perjalanan.`
+      ? `Berhasil menyusun ${normalizedItems.length} barang berdasarkan data ${sources.join(' dan ')} perjalanan.`
+      : `Berhasil menyusun ${normalizedItems.length} barang berdasarkan tujuan, durasi, dan jenis perjalanan.`
   } catch (error) {
     errorMessage.value =
       error.message || 'Tidak dapat menghubungi AI. Pastikan backend TripMate sedang berjalan.'
@@ -284,7 +283,7 @@ function deleteItem(id) {
 function clearItems() {
   if (items.value.length === 0) return
 
-  if (!window.confirm('Hapus semua barang dari packing list ini?')) return
+  if (!window.confirm('Hapus semua barang dari daftar perlengkapan ini?')) return
 
   items.value = []
   successMessage.value = 'Semua barang berhasil dihapus.'
@@ -299,7 +298,7 @@ function clearItems() {
         <p class="text-sm font-semibold uppercase tracking-widest text-[#347bd0]">
           Persiapan perjalanan
         </p>
-        <h1 class="mt-2 text-3xl font-bold text-[#263951] sm:text-4xl">Packing List</h1>
+        <h1 class="mt-2 text-3xl font-bold text-[#263951] sm:text-4xl">Daftar Perlengkapan</h1>
         <p class="mt-3 text-[#52657d]">Siapkan barang bawaan berdasarkan rencana perjalananmu.</p>
       </div>
 
@@ -311,9 +310,9 @@ function clearItems() {
             ✨
           </div>
           <div>
-            <h2 class="text-xl font-bold text-[#263951]">Buat Packing List dengan AI</h2>
+            <h2 class="text-xl font-bold text-[#263951]">Buat Daftar Perlengkapan dengan AI</h2>
             <p class="mt-1 text-sm text-slate-500">
-              AI dapat menggunakan informasi tiket dan itinerary yang tersimpan.
+              AI dapat menggunakan informasi tiket dan rencana perjalanan yang tersimpan.
             </p>
           </div>
         </div>
@@ -345,12 +344,12 @@ function clearItems() {
                 : 'border-slate-200 bg-white text-slate-500'
             "
           >
-            <strong>{{ linkedContext.hasItinerary ? '✓' : '○' }} Itinerary perjalanan</strong>
+            <strong> {{ linkedContext.hasItinerary ? '✓' : '○' }} Rencana Perjalanan </strong>
             <p class="mt-1">
               {{
                 linkedContext.hasItinerary
-                  ? 'Aktivitas dari itinerary tersimpan ditemukan.'
-                  : 'Belum ada itinerary tersimpan. Kamu tetap bisa membuat daftar.'
+                  ? 'Aktivitas dari rencana perjalanan yang tersimpan ditemukan.'
+                  : 'Belum ada rencana perjalanan tersimpan. Kamu tetap bisa membuat daftar.'
               }}
             </p>
           </div>
@@ -411,12 +410,12 @@ function clearItems() {
             class="flex w-full items-center justify-center gap-2 rounded-xl bg-[#347bd0] px-6 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <span>{{ isGenerating ? '⏳' : '✨' }}</span>
-            {{ isGenerating ? 'AI sedang membuat daftar...' : 'Generate Packing List' }}
+            {{ isGenerating ? 'AI sedang menyusun daftar...' : 'Buat Daftar Perlengkapan' }}
           </button>
 
           <p class="text-xs leading-5 text-slate-500">
-            Generate baru mengganti daftar yang sedang tampil jika berhasil. Pastikan daftar lama
-            tidak lagi diperlukan sebelum membuat daftar baru.
+            Pembuatan daftar baru akan mengganti daftar yang sedang tampil jika berhasil. Pastikan
+            daftar lama tidak lagi diperlukan sebelum membuat daftar baru.
           </p>
         </form>
       </section>
@@ -478,7 +477,7 @@ function clearItems() {
         >
           <p class="text-lg font-semibold text-[#263951]">Belum ada barang</p>
           <p class="mt-2 text-sm text-slate-500">
-            Generate daftar dengan AI atau tambahkan barang secara manual.
+            Buat daftar dengan AI atau tambahkan barang secara manual.
           </p>
         </div>
 

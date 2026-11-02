@@ -158,8 +158,8 @@ const features = [
   },
   {
     icon: '♧',
-    title: 'Packing List Otomatis',
-    description: 'Jangan lupa barang penting lagi!',
+    title: 'Daftar Perlengkapan Otomatis',
+    description: 'Jangan sampai ada barang penting yang tertinggal!',
   },
   {
     icon: '♡',
@@ -212,8 +212,8 @@ const destinations = [
           </h1>
 
           <p class="mt-2 max-w-lg text-sm tracking-wide text-white/95">
-            Temukan tiket penerbangan terbaik, dapatkan itinerary personal berbasis AI, dan siapkan
-            packing list dalam satu platform.
+            Temukan tiket penerbangan terbaik, dapatkan rekomendasi rencana perjalanan pribadi
+            berbasis AI, dan siapkan daftar perlengkapan dalam satu platform.
           </p>
 
           <a
@@ -373,7 +373,7 @@ const destinations = [
             </p>
             <h2 class="mt-1 text-2xl font-bold text-[#263a53]">Ringkasan Perjalanan</h2>
             <p class="mt-1 text-sm text-slate-500">
-              Halo, {{ currentUser.name || 'Traveler' }}! Ini perjalananmu di TripMate.
+              Halo, {{ currentUser.name || 'Pengguna' }}! Ini perjalananmu di TripMate.
             </p>
           </div>
 
@@ -436,7 +436,9 @@ const destinations = [
 
     <!-- Features -->
     <section class="mx-auto max-w-7xl px-6 pb-8 pt-6 lg:px-10">
-      <h2 class="text-xl font-semibold text-[#263a53]">Semua yang Kamu Butuhkan untuk Traveling</h2>
+      <h2 class="text-xl font-semibold text-[#263a53]">
+        Semua yang Kamu Butuhkan untuk Berpergian
+      </h2>
       <p class="text-sm text-slate-600">
         Nikmati perjalanan yang lebih praktis dengan fitur pintar dari TripMate.
       </p>

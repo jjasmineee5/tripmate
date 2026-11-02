@@ -45,7 +45,7 @@ function saveItinerary() {
   }
 
   if (!Array.isArray(itineraryDays.value) || itineraryDays.value.length === 0) {
-    errorMessage.value = 'Buat itinerary terlebih dahulu sebelum menyimpan.'
+    errorMessage.value = 'Buat rencana perjalanan terlebih dahulu sebelum menyimpan.'
     successMessage.value = ''
     return false
   }
@@ -66,7 +66,7 @@ function saveItinerary() {
     const verification = localStorage.getItem(itineraryStorageKey)
 
     if (!verification) {
-      throw new Error('Data itinerary tidak ditemukan setelah disimpan.')
+      throw new Error('Data rencana perjalanan tidak ditemukan setelah disimpan.')
     }
 
     const verifiedData = JSON.parse(verification)
@@ -76,16 +76,16 @@ function saveItinerary() {
       !Array.isArray(verifiedData.days) ||
       verifiedData.days.length !== savedData.days.length
     ) {
-      throw new Error('Verifikasi penyimpanan itinerary gagal.')
+      throw new Error('Verifikasi penyimpanan rencana perjalanan gagal.')
     }
 
-    successMessage.value = 'Itinerary berhasil disimpan!'
+    successMessage.value = 'Rencana perjalanan berhasil disimpan!'
     errorMessage.value = ''
 
     return true
   } catch (error) {
     successMessage.value = ''
-    errorMessage.value = error.message || 'Itinerary gagal disimpan di browser.'
+    errorMessage.value = error.message || 'Rencana perjalanan gagal disimpan di browser.'
 
     return false
   }
@@ -93,7 +93,6 @@ function saveItinerary() {
 
 function loadFlight() {
   const flight = readJson(flightStorageKey)
-
   selectedFlight.value = flight && flight.selectedAt ? flight : null
 }
 
@@ -130,10 +129,8 @@ function applyBookingContext() {
     const returning = flight.returnFlight || null
 
     destination.value = outbound.destination || flight.destination || destination.value
-
     startDate.value = startDate.value || outbound.departureDate || ''
 
-    // Tiket satu arah tidak otomatis mendapatkan tanggal pulang.
     if (returning) {
       endDate.value = endDate.value || returning.departureDate || ''
     } else if (!route.query.endDate) {
@@ -141,7 +138,6 @@ function applyBookingContext() {
     }
   }
 
-  // Booking baru harus dibuatkan itinerary baru.
   itineraryDays.value = []
   selectedDay.value = 0
   errorMessage.value = ''
@@ -319,7 +315,7 @@ async function generateItinerary() {
     const result = await response.json()
 
     if (!response.ok || !result.success) {
-      throw new Error(result.message || 'Gagal menghasilkan itinerary.')
+      throw new Error(result.message || 'Gagal membuat rencana perjalanan.')
     }
 
     const days = normalizeDays(result.itinerary?.days)
@@ -332,11 +328,10 @@ async function generateItinerary() {
     selectedDay.value = 0
     isEditing.value = false
 
-    // Simpan hasil generate juga agar tidak hilang saat refresh.
     saveItinerary()
 
     if (!errorMessage.value) {
-      successMessage.value = 'Itinerary berhasil dibuat dan disimpan!'
+      successMessage.value = 'Rencana perjalanan berhasil dibuat dan disimpan!'
     }
   } catch (error) {
     errorMessage.value =
@@ -364,11 +359,8 @@ function addActivity() {
     return
   }
 
-  // Terima format 09:00 maupun 09.00
   const inputTime = newActivityTime.value.trim() || '09:00'
   const normalizedTime = inputTime.replace('.', ':')
-
-  // Validasi format jam 24 jam
   const timeMatch = normalizedTime.match(/^([01]\d|2[0-3]):([0-5]\d)$/)
 
   if (!timeMatch) {
@@ -386,22 +378,18 @@ function addActivity() {
     completed: false,
   })
 
-  // Urutkan aktivitas berdasarkan jam paling awal
   activeDay.value.activities.sort((a, b) => {
     const timeA = String(a.time || '23:59').replace('.', ':')
     const timeB = String(b.time || '23:59').replace('.', ':')
-
     return timeA.localeCompare(timeB)
   })
 
-  // Reset formulir
   newActivityName.value = ''
   newActivityTime.value = ''
   newActivityDescription.value = ''
   errorMessage.value = ''
   successMessage.value = ''
 
-  // Simpan aktivitas beserta urutan yang sudah diperbaiki
   saveItinerary()
 }
 
@@ -448,7 +436,8 @@ function startNewItinerary() {
   try {
     localStorage.removeItem(itineraryStorageKey)
   } catch {
-    errorMessage.value = 'Itinerary baru dibuat, tetapi data lama gagal dihapus dari browser.'
+    errorMessage.value =
+      'Rencana perjalanan baru dibuat, tetapi data lama gagal dihapus dari browser.'
   }
 }
 
@@ -471,7 +460,7 @@ watch(
     <div class="mx-auto max-w-6xl">
       <header class="mb-8">
         <p class="text-sm font-bold uppercase tracking-[0.2em] text-[#347bd0]">
-          TripMate · AI Travel Planner
+          TripMate · Perencana Perjalanan AI
         </p>
 
         <h1 class="mt-2 text-3xl font-extrabold text-[#263951] sm:text-4xl">
@@ -479,7 +468,7 @@ watch(
         </h1>
 
         <p class="mt-3 max-w-2xl text-[#52657d]">
-          Buat itinerary yang sesuai dengan destinasi, tanggal perjalanan, preferensi, dan
+          Buat rencana perjalanan yang sesuai dengan destinasi, tanggal perjalanan, preferensi, dan
           anggaranmu.
         </p>
       </header>
@@ -491,11 +480,9 @@ watch(
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p class="text-sm font-semibold text-[#347bd0]">✈️ Tiket penerbangan terpilih</p>
-
             <h2 class="mt-1 text-lg font-bold text-[#263951]">
               {{ flightSummary.origin }} → {{ flightSummary.destination }}
             </h2>
-
             <p class="mt-1 text-sm text-slate-500">
               {{ flightSummary.airline }} ({{ flightSummary.code }})
             </p>
@@ -547,7 +534,7 @@ watch(
         <div>
           <h2 class="font-bold text-[#263951]">Belum ada tiket aktif yang dipilih</h2>
           <p class="mt-1 text-sm text-[#52657d]">
-            Kamu tetap bisa membuat itinerary tanpa tiket penerbangan.
+            Kamu tetap bisa membuat rencana perjalanan tanpa tiket penerbangan.
           </p>
         </div>
 
@@ -563,10 +550,11 @@ watch(
       <div
         class="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(300px,0.85fr)_minmax(0,1.65fr)]"
       >
-        <!-- FORM DETAIL PERJALANAN -->
         <section class="h-fit rounded-2xl bg-white p-5 shadow-sm sm:p-6">
           <h2 class="text-xl font-bold text-[#263951]">Detail Perjalanan</h2>
-          <p class="mt-1 text-sm text-slate-500">Lengkapi informasi sebelum membuat itinerary.</p>
+          <p class="mt-1 text-sm text-slate-500">
+            Lengkapi informasi sebelum membuat rencana perjalanan.
+          </p>
 
           <form class="mt-6 space-y-5" @submit.prevent="generateItinerary">
             <div>
@@ -661,16 +649,19 @@ watch(
               :disabled="isGenerating"
               class="w-full rounded-xl bg-[#347bd0] px-5 py-3 font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {{ isGenerating ? 'Sedang Membuat Itinerary...' : '✨ Buat Itinerary dengan AI' }}
+              {{
+                isGenerating
+                  ? 'Sedang Membuat Rencana Perjalanan...'
+                  : '✨ Buat Rencana Perjalanan dengan AI'
+              }}
             </button>
           </form>
         </section>
 
-        <!-- HASIL ITINERARY -->
         <section class="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 class="text-xl font-bold text-[#263951]">Itinerary Perjalanan</h2>
+              <h2 class="text-xl font-bold text-[#263951]">Rencana Perjalanan</h2>
               <p class="mt-1 text-sm text-slate-500">
                 Agenda perjalanan yang dihasilkan AI bisa kamu sesuaikan.
               </p>
@@ -689,15 +680,14 @@ watch(
             class="mt-6 flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center"
           >
             <div class="text-5xl">🗺️</div>
-            <h3 class="mt-4 text-lg font-bold text-[#263951]">Itinerary belum dibuat</h3>
+            <h3 class="mt-4 text-lg font-bold text-[#263951]">Rencana perjalanan belum dibuat</h3>
             <p class="mt-2 max-w-sm text-sm leading-6 text-slate-500">
-              Isi destinasi, tanggal, dan preferensimu. Tekan tombol “Buat Itinerary dengan AI”
-              untuk menghasilkan agenda perjalanan.
+              Isi destinasi, tanggal, dan preferensimu. Tekan tombol “Buat Rencana Perjalanan dengan
+              AI” untuk menghasilkan agenda perjalanan.
             </p>
           </div>
 
           <template v-else>
-            <!-- NAVIGASI HARI -->
             <div class="mt-5 flex gap-2 overflow-x-auto pb-2">
               <button
                 v-for="(day, index) in itineraryDays"
@@ -735,7 +725,6 @@ watch(
                 Belum ada aktivitas untuk hari ini. Kamu bisa menambahkan aktivitas sendiri.
               </div>
 
-              <!-- DAFTAR AKTIVITAS -->
               <div v-else class="mt-5 space-y-3">
                 <article
                   v-for="(activity, index) in activeDay.activities"
@@ -807,7 +796,6 @@ watch(
                 </article>
               </div>
 
-              <!-- TAMBAH AKTIVITAS -->
               <div class="mt-5 rounded-xl bg-[#f5f9ff] p-4">
                 <h4 class="font-bold text-[#263951]">Tambah aktivitas</h4>
 
@@ -844,7 +832,6 @@ watch(
               </div>
             </div>
 
-            <!-- RINGKASAN -->
             <div class="mt-6 rounded-xl bg-slate-50 p-4">
               <div class="grid grid-cols-2 gap-4">
                 <div>
@@ -863,14 +850,13 @@ watch(
               </div>
             </div>
 
-            <!-- TOMBOL AKSI -->
             <div class="mt-5 flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
                 class="flex-1 rounded-xl border border-[#347bd0] px-4 py-3 font-semibold text-[#347bd0] hover:bg-blue-50"
                 @click="isEditing = !isEditing"
               >
-                {{ isEditing ? 'Selesai Mengedit' : 'Edit Aktivitas' }}
+                {{ isEditing ? 'Selesai Mengedit' : 'Ubah Aktivitas' }}
               </button>
 
               <button
@@ -879,11 +865,10 @@ watch(
                 class="flex-1 rounded-xl bg-[#347bd0] px-4 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 @click="saveChanges"
               >
-                {{ isSaving ? 'Menyimpan...' : 'Simpan Itinerary' }}
+                {{ isSaving ? 'Menyimpan...' : 'Simpan Rencana Perjalanan' }}
               </button>
             </div>
 
-            <!-- NOTIFIKASI PERSIS DI BAWAH TOMBOL SIMPAN -->
             <div
               v-if="successMessage"
               role="status"
@@ -905,7 +890,7 @@ watch(
               class="mt-3 w-full rounded-xl border border-slate-300 px-4 py-3 font-semibold text-slate-600 hover:bg-slate-50"
               @click="startNewItinerary"
             >
-              Buat Itinerary Baru
+              Buat Rencana Perjalanan Baru
             </button>
           </template>
         </section>
