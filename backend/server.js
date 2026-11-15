@@ -93,7 +93,7 @@ async function generateItineraryWithRetry(ai, prompt, maxAttempts = 3) {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-3.6-flash',
         contents: prompt,
       })
     } catch (error) {
