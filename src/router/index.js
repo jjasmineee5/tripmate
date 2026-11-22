@@ -37,6 +37,12 @@ const router = createRouter({
       meta: { guestOnly: true },
     },
     {
+      path: '/admin/dashboard',
+      name: 'admin-dashboard',
+      component: () => import('../views/AdminDashboardView.vue'),
+      meta: { requiresAdmin: true },
+    },
+    {
       path: '/packing-list',
       name: 'packing-list',
       component: PackingListView,
@@ -97,11 +103,41 @@ const router = createRouter({
   ],
 })
 
-// Periksa status login sebelum membuka halaman
-router.beforeEach((to) => {
-  const isLoggedIn = Boolean(localStorage.getItem('tripmate-current-user'))
+// Ambil informasi pengguna yang sedang login
+function getCurrentUser() {
+  try {
+    const user = localStorage.getItem('tripmate-current-user')
+    return user ? JSON.parse(user) : null
+  } catch {
+    return null
+  }
+}
 
-  // Pengguna belum login tidak boleh membuka halaman privat
+// Periksa hak akses sebelum membuka halaman
+router.beforeEach((to) => {
+  const currentUser = getCurrentUser()
+  const isLoggedIn = Boolean(currentUser)
+
+  // Admin yang sudah login langsung menuju dashboard
+  if (to.meta.adminGuestOnly && currentUser?.role === 'admin') {
+    return { name: 'admin-dashboard' }
+  }
+
+  // Halaman khusus admin
+  if (to.meta.requiresAdmin) {
+    if (!isLoggedIn) {
+      return {
+        name: 'login',
+        query: { redirect: to.fullPath },
+      }
+    }
+
+    if (currentUser.role !== 'admin') {
+      return { name: 'home' }
+    }
+  }
+
+  // Halaman privat pengguna
   if (to.meta.requiresAuth && !isLoggedIn) {
     return {
       name: 'login',

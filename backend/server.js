@@ -1,4 +1,6 @@
 const express = require('express')
+const db = require('./database')
+const { verifyToken } = require('./authMiddleware')
 const cors = require('cors')
 require('dotenv').config()
 const { GoogleGenAI } = require('@google/genai')
@@ -9,10 +11,43 @@ const PORT = process.env.PORT || 3000
 app.use(cors({ origin: 'http://localhost:5173' }))
 app.use(express.json({ limit: '1mb' }))
 
-app.get('/api/health', (req, res) => {
-  res.json({ success: true, message: 'Backend TripMate aktif' })
+const authRoutes = require('./auth')
+const perjalananRoutes = require('./perjalanan')
+const adminRoutes = require('./admin')
+const destinasiRoutes = require('./destinasi')
+const bookingRoutes = require('./bookingRoutes')
+const historyRoutes = require('./historyRoutes')
+
+app.use('/api/auth', authRoutes)
+app.use('/api/perjalanan', perjalananRoutes)
+app.use('/api/admin', adminRoutes)
+app.use('/api/destinasi', destinasiRoutes)
+app.use('/api/booking', bookingRoutes)
+app.use('/api/history', historyRoutes)
+
+// ========================================
+// HEALTH CHECK
+// ========================================
+app.get('/api/health', async (req, res) => {
+  try {
+    await db.query('SELECT 1')
+    res.json({
+      success: true,
+      message: 'Backend TripMate aktif',
+      database: 'MySQL connected',
+    })
+  } catch (error) {
+    console.error('Database health check gagal:', error.message)
+    res.status(500).json({
+      success: false,
+      message: 'Database MySQL tidak terhubung',
+    })
+  }
 })
 
+// ========================================
+// HELPER FUNCTIONS
+// ========================================
 function formatDate(date) {
   return [
     date.getFullYear(),
@@ -86,30 +121,46 @@ function sleep(ms) {
 
 function isRetryableGeminiError(error) {
   const status = Number(error?.status || error?.code)
-  return [429, 500, 502, 503, 504].includes(status)
+  return [404, 429, 500, 502, 503, 504].includes(status)
 }
 
 async function generateItineraryWithRetry(ai, prompt, maxAttempts = 3) {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: prompt,
-      })
-    } catch (error) {
-      if (!isRetryableGeminiError(error) || attempt === maxAttempts) {
-        throw error
-      }
+  const models = [
+    'gemini-3.6-flash', // Model utama
+    'gemini-2.5-flash', // Cadangan 1
+    'gemini-2.5-flash-lite', // Cadangan 2
+  ]
 
-      const delay = 1000 * 2 ** (attempt - 1)
-      console.warn(
-        `Gemini gagal pada percobaan ${attempt}/${maxAttempts}. Mencoba kembali dalam ${delay / 1000} detik.`,
-      )
-      await sleep(delay)
+  for (const model of models) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        console.log(`Mencoba AI model: ${model} (${attempt}/${maxAttempts})`)
+
+        return await ai.models.generateContent({
+          model,
+          contents: prompt,
+        })
+      } catch (error) {
+        if (!isRetryableGeminiError(error)) {
+          throw error
+        }
+
+        if (attempt < maxAttempts) {
+          const delay = 1000 * 2 ** (attempt - 1)
+
+          console.warn(
+            `${model} gagal pada percobaan ${attempt}/${maxAttempts}. Retry dalam ${delay / 1000} detik.`,
+          )
+
+          await sleep(delay)
+        } else {
+          console.warn(`${model} gagal setelah ${maxAttempts} percobaan.`)
+        }
+      }
     }
   }
 
-  throw new Error('Gemini gagal menghasilkan respons setelah beberapa percobaan.')
+  throw new Error('Semua model AI gagal menghasilkan respons.')
 }
 
 function ensureDailyRoutine(day, index, totalDays, flight) {
@@ -272,8 +323,9 @@ KATEGORI ANGGARAN: BELUM DITENTUKAN
 
 // ========================================
 // UC-16: MENGHASILKAN ITINERARY DENGAN AI
+// Endpoint ini membutuhkan token login
 // ========================================
-app.post('/api/itinerary', async (req, res) => {
+app.post('/api/itinerary', verifyToken, async (req, res) => {
   try {
     const { destination, startDate, endDate, preferences, budget, flight } = req.body || {}
 
@@ -477,8 +529,9 @@ FORMAT JSON:
 
 // ========================================
 // UC-15: MENGHASILKAN PACKING LIST DENGAN AI
+// Endpoint ini membutuhkan token login
 // ========================================
-app.post('/api/packing-list', async (req, res) => {
+app.post('/api/packing-list', verifyToken, async (req, res) => {
   try {
     const { destination, duration, tripType, flight, itinerary } = req.body || {}
 
@@ -675,6 +728,9 @@ FORMAT JSON:
   }
 })
 
+// ========================================
+// START SERVER
+// ========================================
 app.listen(PORT, () => {
   console.log(`Backend TripMate berjalan di http://localhost:${PORT}`)
 })

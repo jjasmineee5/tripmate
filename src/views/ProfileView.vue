@@ -2,138 +2,174 @@
 import { ref, onMounted, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 
+const API_URL = 'http://localhost:3000/api'
+
 const name = ref('')
 const email = ref('')
 const message = ref('')
 const messageType = ref('success')
 const currentUser = ref(null)
 const trips = ref([])
+const loadingProfile = ref(true)
+const loadingTrips = ref(false)
+const saving = ref(false)
 
 const tripHistory = computed(() => {
-  if (!currentUser.value?.id) return []
-
-  return trips.value
-    .filter((trip) => String(trip.userId) === String(currentUser.value.id))
-    .sort((a, b) => {
-      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
-    })
+  return [...trips.value].sort((a, b) => {
+    return new Date(b.tanggal_dibuat || 0) - new Date(a.tanggal_dibuat || 0)
+  })
 })
 
-onMounted(() => {
+function getToken() {
+  return localStorage.getItem('tripmate-token')
+}
+
+function showMessage(text, type = 'success') {
+  message.value = text
+  messageType.value = type
+}
+
+// Mengambil data perjalanan dari MySQL
+async function loadTrips() {
+  if (!getToken()) return
+
+  loadingTrips.value = true
+
+  try {
+    const response = await fetch(`${API_URL}/perjalanan`, {
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+      },
+    })
+
+    const result = await response.json()
+
+    if (!response.ok || result.success === false) {
+      throw new Error(result.message || 'Gagal mengambil riwayat perjalanan.')
+    }
+
+    trips.value = Array.isArray(result.data) ? result.data : []
+  } catch (error) {
+    showMessage(`Riwayat perjalanan gagal dimuat: ${error.message}`, 'error')
+  } finally {
+    loadingTrips.value = false
+  }
+}
+
+// Mengambil data profil terbaru dari server
+async function loadProfile() {
+  loadingProfile.value = true
+
   try {
     const savedUser = localStorage.getItem('tripmate-current-user')
 
-    if (!savedUser) {
-      message.value = 'Data akun tidak ditemukan. Silakan login kembali.'
-      messageType.value = 'error'
-      return
+    if (!savedUser || !getToken()) {
+      throw new Error('Silakan login kembali untuk membuka profil.')
     }
 
     const user = JSON.parse(savedUser)
-    currentUser.value = user
 
+    if (!user.id) {
+      throw new Error('Identitas akun tidak ditemukan.')
+    }
+
+    currentUser.value = user
     name.value = user.name || ''
     email.value = user.email || ''
-
-    const savedTrips = JSON.parse(localStorage.getItem('tripmate-trips') || '[]')
-    trips.value = Array.isArray(savedTrips) ? savedTrips : []
-  } catch {
-    message.value = 'Data akun atau perjalanan gagal dimuat.'
-    messageType.value = 'error'
+  } catch (error) {
+    showMessage(error.message, 'error')
+  } finally {
+    loadingProfile.value = false
   }
-})
+}
 
-function saveProfile() {
-  message.value = ''
+// Memperbarui profil di MySQL
+async function saveProfile() {
+  showMessage('')
 
   const normalizedName = name.value.trim()
   const normalizedEmail = email.value.trim().toLowerCase()
 
   if (!normalizedName || !normalizedEmail) {
-    message.value = 'Nama dan email wajib diisi.'
-    messageType.value = 'error'
+    showMessage('Nama dan email wajib diisi.', 'error')
+    return
+  }
+
+  if (normalizedName.length > 100 || normalizedEmail.length > 100) {
+    showMessage('Nama atau email terlalu panjang.', 'error')
     return
   }
 
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
   if (!emailPattern.test(normalizedEmail)) {
-    message.value = 'Format email tidak valid.'
-    messageType.value = 'error'
+    showMessage('Format email tidak valid.', 'error')
     return
   }
 
+  if (!getToken()) {
+    showMessage('Sesi login tidak ditemukan. Silakan login kembali.', 'error')
+    return
+  }
+
+  saving.value = true
+
   try {
-    const savedCurrentUser = localStorage.getItem('tripmate-current-user')
-    const savedUsers = JSON.parse(localStorage.getItem('tripmate-users') || '[]')
+    const response = await fetch(`${API_URL}/auth/profile`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${getToken()}`,
+      },
+      body: JSON.stringify({
+        name: normalizedName,
+        email: normalizedEmail,
+      }),
+    })
 
-    if (!savedCurrentUser || !Array.isArray(savedUsers)) {
-      throw new Error('Data akun tidak valid.')
+    const result = await response.json()
+
+    if (!response.ok || result.success === false) {
+      throw new Error(result.message || 'Profil gagal diperbarui.')
     }
 
-    const currentUserData = JSON.parse(savedCurrentUser)
-
-    if (!currentUserData.id) {
-      throw new Error('Identitas akun tidak ditemukan.')
+    if (!result.user) {
+      throw new Error('Server tidak mengembalikan data profil terbaru.')
     }
 
-    const userIndex = savedUsers.findIndex((user) => user.id === currentUserData.id)
+    // Simpan data terbaru untuk navbar dan halaman lainnya
+    currentUser.value = result.user
 
-    if (userIndex === -1) {
-      throw new Error('Akun pengguna tidak ditemukan.')
-    }
+    localStorage.setItem('tripmate-current-user', JSON.stringify(result.user))
 
-    const emailExists = savedUsers.some(
-      (user) =>
-        user.id !== currentUserData.id &&
-        typeof user.email === 'string' &&
-        user.email.trim().toLowerCase() === normalizedEmail,
-    )
+    name.value = result.user.name
+    email.value = result.user.email
 
-    if (emailExists) {
-      message.value = 'Email sudah digunakan oleh akun lain.'
-      messageType.value = 'error'
-      return
-    }
-
-    const updatedUser = {
-      ...savedUsers[userIndex],
-      name: normalizedName,
-      email: normalizedEmail,
-    }
-
-    savedUsers[userIndex] = updatedUser
-
-    const updatedCurrentUser = {
-      id: updatedUser.id,
-      name: updatedUser.name,
-      email: updatedUser.email,
-    }
-
-    localStorage.setItem('tripmate-users', JSON.stringify(savedUsers))
-    localStorage.setItem('tripmate-current-user', JSON.stringify(updatedCurrentUser))
-
-    currentUser.value = updatedCurrentUser
-    name.value = updatedUser.name
-    email.value = updatedUser.email
-
-    message.value = 'Profil berhasil diperbarui.'
-    messageType.value = 'success'
-  } catch {
-    message.value = 'Profil gagal diperbarui. Silakan coba lagi.'
-    messageType.value = 'error'
+    showMessage('Profil berhasil diperbarui dan disimpan ke database.', 'success')
+  } catch (error) {
+    showMessage(error.message, 'error')
+  } finally {
+    saving.value = false
   }
 }
 
 function formatDate(date) {
   if (!date) return '-'
 
-  return new Date(date).toLocaleDateString('id-ID', {
+  return new Date(`${String(date).slice(0, 10)}T00:00:00`).toLocaleDateString('id-ID', {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
   })
 }
+
+onMounted(async () => {
+  await loadProfile()
+
+  if (currentUser.value && currentUser.value.role !== 'admin') {
+    await loadTrips()
+  }
+})
 </script>
 
 <template>
@@ -151,7 +187,12 @@ function formatDate(date) {
           </p>
         </div>
 
-        <form class="space-y-6" @submit.prevent="saveProfile">
+        <div v-if="loadingProfile" class="py-8 text-center text-sm text-slate-500">
+          Memuat informasi akun...
+        </div>
+
+        <form v-else class="space-y-6" @submit.prevent="saveProfile">
+          <!-- Nama -->
           <div>
             <label for="profile-name" class="mb-2 block text-sm font-semibold text-[#263951]">
               Nama Lengkap
@@ -162,12 +203,14 @@ function formatDate(date) {
               v-model="name"
               type="text"
               autocomplete="name"
+              maxlength="100"
               required
               placeholder="Masukkan nama lengkap"
               class="w-full rounded-lg border border-slate-300 px-4 py-3 outline-none transition focus:border-[#347bd0] focus:ring-2 focus:ring-blue-100"
             />
           </div>
 
+          <!-- Email -->
           <div>
             <label for="profile-email" class="mb-2 block text-sm font-semibold text-[#263951]">
               Email
@@ -178,12 +221,30 @@ function formatDate(date) {
               v-model="email"
               type="email"
               autocomplete="email"
+              maxlength="100"
               required
               placeholder="Masukkan email"
               class="w-full rounded-lg border border-slate-300 px-4 py-3 outline-none transition focus:border-[#347bd0] focus:ring-2 focus:ring-blue-100"
             />
           </div>
 
+          <!-- Status Akun: hanya untuk pengguna -->
+          <div v-if="currentUser?.role !== 'admin'" class="rounded-lg bg-blue-50 p-4">
+            <p class="text-sm font-semibold text-[#263951]">Status Akun</p>
+
+            <span
+              class="mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold"
+              :class="
+                currentUser?.isPremium
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-slate-200 text-slate-700'
+              "
+            >
+              {{ currentUser?.isPremium ? 'Premium' : 'Free' }}
+            </span>
+          </div>
+
+          <!-- Pesan -->
           <p
             v-if="message"
             class="rounded-lg p-3 text-sm"
@@ -195,17 +256,25 @@ function formatDate(date) {
             {{ message }}
           </p>
 
+          <!-- Simpan -->
           <button
             type="submit"
-            class="w-full rounded-lg bg-[#347bd0] px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
+            :disabled="saving"
+            class="w-full rounded-lg bg-[#347bd0] px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Simpan Perubahan
+            {{ saving ? 'Menyimpan...' : 'Simpan Perubahan' }}
           </button>
+          <RouterLink
+            :to="currentUser?.role === 'admin' ? '/admin/dashboard' : '/'"
+            class="block w-full rounded-lg border border-[#347bd0] px-5 py-3 text-center font-semibold text-[#347bd0] transition hover:bg-blue-50"
+          >
+            Kembali ke Beranda
+          </RouterLink>
         </form>
       </div>
 
-      <!-- RIWAYAT PERJALANAN -->
-      <div class="rounded-2xl bg-white p-8 shadow-lg sm:p-10">
+      <!-- RIWAYAT PERJALANAN: hanya untuk pengguna -->
+      <div v-if="currentUser?.role !== 'admin'" class="rounded-2xl bg-white p-8 shadow-lg sm:p-10">
         <div class="mb-6">
           <p class="text-sm font-semibold uppercase tracking-wider text-[#347bd0]">
             Aktivitas Saya
@@ -218,8 +287,17 @@ function formatDate(date) {
           </p>
         </div>
 
+        <!-- Loading -->
         <div
-          v-if="tripHistory.length === 0"
+          v-if="loadingTrips"
+          class="rounded-xl bg-blue-50 px-5 py-8 text-center text-sm text-slate-600"
+        >
+          Memuat riwayat perjalanan...
+        </div>
+
+        <!-- Kosong -->
+        <div
+          v-else-if="tripHistory.length === 0"
           class="rounded-xl border border-dashed border-slate-300 px-5 py-8 text-center"
         >
           <p class="font-semibold text-slate-600">Belum ada riwayat perjalanan.</p>
@@ -234,36 +312,40 @@ function formatDate(date) {
           </RouterLink>
         </div>
 
+        <!-- Daftar Riwayat -->
         <div v-else class="space-y-4">
-          <div
+          <article
             v-for="trip in tripHistory"
-            :key="trip.id"
+            :key="trip.id_perjalanan"
             class="rounded-xl border border-slate-200 p-5 transition hover:border-[#347bd0]"
           >
             <h3 class="text-lg font-bold text-[#263951]">
-              {{ trip.name }}
+              {{ trip.judul }}
             </h3>
 
             <p class="mt-1 text-sm font-medium text-[#347bd0]">
-              {{ trip.destination }}
+              {{ trip.nama_destinasi || trip.destinasi || 'Destinasi' }}
             </p>
 
             <div class="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500">
               <span>
                 <span class="font-semibold">Mulai:</span>
-                {{ formatDate(trip.startDate) }}
+                {{ formatDate(trip.tanggal_mulai) }}
               </span>
 
               <span>
                 <span class="font-semibold">Selesai:</span>
-                {{ formatDate(trip.endDate) }}
+                {{ formatDate(trip.tanggal_selesai) }}
               </span>
             </div>
 
-            <p v-if="trip.notes" class="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-600">
-              {{ trip.notes }}
+            <p
+              v-if="trip.catatan"
+              class="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-600"
+            >
+              {{ trip.catatan }}
             </p>
-          </div>
+          </article>
 
           <RouterLink
             to="/trips"

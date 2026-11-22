@@ -12,7 +12,7 @@ const errorMessage = ref('')
 const successMessage = ref('')
 const isSubmitting = ref(false)
 
-function register() {
+async function register() {
   errorMessage.value = ''
   successMessage.value = ''
 
@@ -33,69 +33,37 @@ function register() {
     return
   }
 
-  const normalizedEmail = email.value.trim().toLowerCase()
-
-  let users
-
-  try {
-    const storedUsers = JSON.parse(localStorage.getItem('tripmate-users') || '[]')
-
-    if (!Array.isArray(storedUsers)) {
-      errorMessage.value = 'Data akun tidak valid. Silakan periksa kembali.'
-      return
-    }
-
-    users = storedUsers
-  } catch {
-    errorMessage.value = 'Data akun tidak dapat dibaca. Silakan coba lagi.'
-    return
-  }
-
-  const emailExists = users.some(
-    (user) => typeof user.email === 'string' && user.email.trim().toLowerCase() === normalizedEmail,
-  )
-
-  if (emailExists) {
-    errorMessage.value = 'Email ini sudah terdaftar.'
-    return
-  }
-
-  const newUser = {
-    id: Date.now(),
-    name: name.value.trim(),
-    email: normalizedEmail,
-    password: password.value,
-  }
-
-  try {
-    users.push(newUser)
-
-    localStorage.setItem('tripmate-users', JSON.stringify(users))
-
-    // Pastikan akun berhasil disimpan
-    const savedUsers = JSON.parse(localStorage.getItem('tripmate-users') || '[]')
-
-    const savedSuccessfully = savedUsers.some(
-      (user) => user.id === newUser.id && user.email === normalizedEmail,
-    )
-
-    if (!savedSuccessfully) {
-      errorMessage.value = 'Pendaftaran gagal disimpan. Silakan coba lagi.'
-      return
-    }
-  } catch {
-    errorMessage.value = 'Pendaftaran gagal disimpan. Silakan coba lagi.'
-    return
-  }
-
-  successMessage.value = 'Pendaftaran berhasil! Silakan masuk.'
   isSubmitting.value = true
 
-  // Registrasi tidak otomatis login
-  router.replace({ name: 'login' }).catch(() => {
+  try {
+    const response = await fetch('http://localhost:3000/api/auth/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: name.value.trim(),
+        email: email.value.trim().toLowerCase(),
+        password: password.value,
+      }),
+    })
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      errorMessage.value = result.message || 'Pendaftaran gagal. Silakan coba lagi.'
+      return
+    }
+
+    successMessage.value = 'Pendaftaran berhasil! Silakan masuk.'
+
+    await router.replace({ name: 'login' })
+  } catch (error) {
+    console.error('Register error:', error)
+    errorMessage.value = 'Tidak dapat terhubung ke server. Silakan coba lagi.'
+  } finally {
     isSubmitting.value = false
-    errorMessage.value = 'Gagal membuka halaman Login. Silakan klik Masuk.'
-  })
+  }
 }
 </script>
 
@@ -184,7 +152,7 @@ function register() {
           :disabled="isSubmitting"
           class="w-full rounded-xl bg-[#347bd0] px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {{ isSubmitting ? 'Pendaftaran Berhasil' : 'Daftar Sekarang' }}
+          {{ isSubmitting ? 'Memproses...' : 'Daftar Sekarang' }}
         </button>
       </form>
 

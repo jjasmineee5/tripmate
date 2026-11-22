@@ -1,42 +1,68 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import heroImage from '../assets/images/hero beranda.png'
 
 const router = useRouter()
 
-const origin = ref('Balikpapan')
-const destination = ref('Denpasar')
-const departureDate = ref('')
-const passengers = ref(1)
+const API_URL = 'http://localhost:3000/api'
 
-const showOriginSuggestions = ref(false)
-const showDestinationSuggestions = ref(false)
+const origin = ref('')
+const destination = ref('')
+const departureDate = ref('')
+const passengers = ref(null)
 
 // Data pengguna dan riwayat perjalanan
 const currentUser = ref(null)
 const trips = ref([])
+const loadingTrips = ref(false)
+const tripError = ref('')
+// Data riwayat pemesanan
+const bookings = ref([])
+const loadingBookings = ref(false)
+const bookingError = ref('')
 
-try {
-  const savedUser = localStorage.getItem('tripmate-current-user')
-  const savedTrips = localStorage.getItem('tripmate-trips')
+function getToken() {
+  return localStorage.getItem('tripmate-token')
+}
 
-  currentUser.value = savedUser ? JSON.parse(savedUser) : null
+// Mengambil perjalanan dari database
+async function loadTrips() {
+  if (!currentUser.value?.id || !getToken()) {
+    trips.value = []
+    return
+  }
 
-  const parsedTrips = savedTrips ? JSON.parse(savedTrips) : []
-  trips.value = Array.isArray(parsedTrips) ? parsedTrips : []
-} catch {
-  currentUser.value = null
-  trips.value = []
+  loadingTrips.value = true
+  tripError.value = ''
+
+  try {
+    const response = await fetch(`${API_URL}/perjalanan`, {
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+      },
+    })
+
+    const result = await response.json()
+
+    if (!response.ok || result.success === false) {
+      throw new Error(result.message || 'Gagal mengambil data perjalanan.')
+    }
+
+    trips.value = Array.isArray(result.data) ? result.data : []
+  } catch (error) {
+    tripError.value = error.message
+    trips.value = []
+  } finally {
+    loadingTrips.value = false
+  }
 }
 
 // Perjalanan milik pengguna yang sedang login
 const myTrips = computed(() => {
-  if (!currentUser.value?.id) return []
-
-  return trips.value
-    .filter((trip) => String(trip.userId) === String(currentUser.value.id))
-    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+  return [...trips.value].sort((a, b) => {
+    return new Date(b.tanggal_dibuat || 0) - new Date(a.tanggal_dibuat || 0)
+  })
 })
 
 // Maksimal tiga perjalanan terbaru
@@ -45,40 +71,21 @@ const latestTrips = computed(() => myTrips.value.slice(0, 3))
 function formatDate(date) {
   if (!date) return '-'
 
-  return new Date(date).toLocaleDateString('id-ID', {
+  return new Date(`${String(date).slice(0, 10)}T00:00:00`).toLocaleDateString('id-ID', {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
   })
 }
 
-const cities = [
-  'Balikpapan',
-  'Samarinda',
-  'Jakarta',
-  'Surabaya',
-  'Denpasar',
-  'Yogyakarta',
-  'Makassar',
-  'Banjarmasin',
-  'Pontianak',
-  'Bandung',
-  'Medan',
-  'Lombok',
-  'Manado',
-  'Palembang',
-  'Semarang',
-  'Malang',
-  'Batam',
-  'Padang',
-  'Aceh',
-  'Kupang',
-  'Jayapura',
-  'Solo',
-  'Pekanbaru',
-  'Jambi',
-  'Bengkulu',
-]
+// Autocomplete kota dan negara menggunakan Open-Meteo Geocoding
+const originSuggestions = ref([])
+const destinationSuggestions = ref([])
+const searchingOrigin = ref(false)
+const searchingDestination = ref(false)
+
+let originSearchTimer = null
+let destinationSearchTimer = null
 
 const today = (() => {
   const date = new Date()
@@ -86,30 +93,78 @@ const today = (() => {
   return date.toISOString().split('T')[0]
 })()
 
-const filteredOrigins = computed(() => {
-  const query = origin.value.trim().toLowerCase()
+function searchLocation(type) {
+  const isOrigin = type === 'origin'
+  const query = (isOrigin ? origin.value : destination.value).trim()
 
-  if (!query) return cities
+  clearTimeout(isOrigin ? originSearchTimer : destinationSearchTimer)
 
-  return cities.filter((city) => city.toLowerCase().includes(query))
-})
+  if (isOrigin) {
+    originSuggestions.value = []
+    if (query.length < 2) {
+      searchingOrigin.value = false
+      return
+    }
+    searchingOrigin.value = true
+  } else {
+    destinationSuggestions.value = []
+    if (query.length < 2) {
+      searchingDestination.value = false
+      return
+    }
+    searchingDestination.value = true
+  }
 
-const filteredDestinations = computed(() => {
-  const query = destination.value.trim().toLowerCase()
+  const timer = setTimeout(async () => {
+    try {
+      const response = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=6&language=id&format=json`,
+      )
 
-  if (!query) return cities
+      if (!response.ok) throw new Error('Gagal mencari lokasi.')
 
-  return cities.filter((city) => city.toLowerCase().includes(query))
-})
+      const result = await response.json()
+      const currentQuery = (isOrigin ? origin.value : destination.value).trim()
 
-function selectOrigin(city) {
-  origin.value = city
-  showOriginSuggestions.value = false
+      if (currentQuery !== query) return
+
+      const suggestions = (result.results || []).map((item) => {
+        const parts = [item.name, item.admin1, item.country].filter(
+          (value, index, array) => value && array.indexOf(value) === index,
+        )
+
+        return { ...item, label: parts.join(', ') }
+      })
+
+      if (isOrigin) originSuggestions.value = suggestions
+      else destinationSuggestions.value = suggestions
+    } catch {
+      if (isOrigin) originSuggestions.value = []
+      else destinationSuggestions.value = []
+    } finally {
+      if ((isOrigin ? origin.value : destination.value).trim() === query) {
+        if (isOrigin) searchingOrigin.value = false
+        else searchingDestination.value = false
+      }
+    }
+  }, 350)
+
+  if (isOrigin) originSearchTimer = timer
+  else destinationSearchTimer = timer
 }
 
-function selectDestination(city) {
-  destination.value = city
-  showDestinationSuggestions.value = false
+function selectOrigin(location) {
+  origin.value = location.label
+  originSuggestions.value = []
+  searchingOrigin.value = false
+  clearTimeout(originSearchTimer)
+}
+
+function selectDestination(location) {
+  destination.value = location.label
+  destinationSuggestions.value = []
+  searchingDestination.value = false
+  clearTimeout(destinationSearchTimer)
 }
 
 function searchFlights() {
@@ -131,8 +186,13 @@ function searchFlights() {
     return
   }
 
-  showOriginSuggestions.value = false
-  showDestinationSuggestions.value = false
+  if (!Number.isInteger(passengers.value) || passengers.value < 1) {
+    alert('Jumlah penumpang minimal 1 orang.')
+    return
+  }
+
+  originSuggestions.value = []
+  destinationSuggestions.value = []
 
   router.push({
     path: '/flights',
@@ -194,6 +254,78 @@ const destinations = [
       'https://images.unsplash.com/photo-1516690561799-46d8f74f9abf?auto=format&fit=crop&w=700&q=85',
   },
 ]
+
+onMounted(() => {
+  try {
+    const savedUser = localStorage.getItem('tripmate-current-user')
+    currentUser.value = savedUser ? JSON.parse(savedUser) : null
+  } catch {
+    currentUser.value = null
+  }
+
+  if (currentUser.value) {
+    loadTrips()
+    loadBookings()
+  }
+})
+
+// Mengambil riwayat pemesanan dari database
+async function loadBookings() {
+  if (!currentUser.value?.id || !getToken()) {
+    bookings.value = []
+    return
+  }
+
+  loadingBookings.value = true
+  bookingError.value = ''
+
+  try {
+    const response = await fetch(`${API_URL}/history`, {
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+      },
+    })
+
+    const result = await response.json()
+
+    if (!response.ok || result.success === false) {
+      throw new Error(result.message || 'Gagal mengambil riwayat pemesanan.')
+    }
+
+    bookings.value = Array.isArray(result.data) ? result.data : []
+  } catch (error) {
+    bookingError.value = error.message
+    bookings.value = []
+  } finally {
+    loadingBookings.value = false
+  }
+}
+
+// Maksimal tiga pemesanan terbaru
+const latestBookings = computed(() => bookings.value.slice(0, 3))
+
+function formatBookingDate(date) {
+  if (!date) return '-'
+
+  return new Date(date).toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
+function formatBookingPrice(price) {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    maximumFractionDigits: 0,
+  }).format(Number(price) || 0)
+}
+
+onUnmounted(() => {
+  clearTimeout(originSearchTimer)
+  clearTimeout(destinationSearchTimer)
+})
 </script>
 
 <template>
@@ -249,6 +381,7 @@ const destinations = [
 
               <span class="mt-2 flex items-center gap-2">
                 <span aria-hidden="true">⌖</span>
+
                 <input
                   id="origin"
                   v-model="origin"
@@ -257,27 +390,29 @@ const destinations = [
                   autocomplete="off"
                   class="w-full min-w-0 bg-transparent text-sm outline-none"
                   placeholder="Ketik kota asal"
-                  @focus="showOriginSuggestions = true"
-                  @input="showOriginSuggestions = true"
+                  @input="searchLocation('origin')"
                 />
               </span>
             </label>
 
             <div
-              v-if="showOriginSuggestions && filteredOrigins.length"
+              v-if="originSuggestions.length"
               class="absolute left-0 right-0 top-full z-50 mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
             >
               <button
-                v-for="city in filteredOrigins"
-                :key="city"
+                v-for="(location, index) in originSuggestions"
+                :key="`${location.id}-${index}`"
                 type="button"
-                class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700"
-                @mousedown.prevent="selectOrigin(city)"
+                class="flex w-full flex-col rounded-lg px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                @mousedown.prevent="selectOrigin(location)"
               >
-                <span aria-hidden="true">⌖</span>
-                {{ city }}
+                <span class="font-medium">{{ location.name }}</span>
+                <span class="text-xs text-slate-500">
+                  {{ location.admin1 ? location.admin1 + ', ' : '' }}{{ location.country }}
+                </span>
               </button>
             </div>
+            <p v-if="searchingOrigin" class="mt-1 text-xs text-slate-500">Mencari lokasi...</p>
           </div>
 
           <!-- Kota Tujuan -->
@@ -287,6 +422,7 @@ const destinations = [
 
               <span class="mt-2 flex items-center gap-2">
                 <span aria-hidden="true">⌖</span>
+
                 <input
                   id="destination"
                   v-model="destination"
@@ -295,32 +431,35 @@ const destinations = [
                   autocomplete="off"
                   class="w-full min-w-0 bg-transparent text-sm outline-none"
                   placeholder="Ketik kota tujuan"
-                  @focus="showDestinationSuggestions = true"
-                  @input="showDestinationSuggestions = true"
+                  @input="searchLocation('destination')"
                 />
               </span>
             </label>
 
             <div
-              v-if="showDestinationSuggestions && filteredDestinations.length"
+              v-if="destinationSuggestions.length"
               class="absolute left-0 right-0 top-full z-50 mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
             >
               <button
-                v-for="city in filteredDestinations"
-                :key="city"
+                v-for="(location, index) in destinationSuggestions"
+                :key="`${location.id}-${index}`"
                 type="button"
-                class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700"
-                @mousedown.prevent="selectDestination(city)"
+                class="flex w-full flex-col rounded-lg px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                @mousedown.prevent="selectDestination(location)"
               >
-                <span aria-hidden="true">⌖</span>
-                {{ city }}
+                <span class="font-medium">{{ location.name }}</span>
+                <span class="text-xs text-slate-500">
+                  {{ location.admin1 ? location.admin1 + ', ' : '' }}{{ location.country }}
+                </span>
               </button>
             </div>
+            <p v-if="searchingDestination" class="mt-1 text-xs text-slate-500">Mencari lokasi...</p>
           </div>
 
           <!-- Tanggal Keberangkatan -->
           <label class="rounded-xl border border-slate-200 p-3">
-            <span class="block text-xs font-medium text-slate-600">Tanggal Keberangkatan</span>
+            <span class="block text-xs font-medium text-slate-600"> Tanggal Keberangkatan </span>
+
             <input
               v-model="departureDate"
               type="date"
@@ -332,19 +471,20 @@ const destinations = [
 
           <!-- Jumlah Penumpang -->
           <label class="rounded-xl border border-slate-200 p-3">
-            <span class="block text-xs font-medium text-slate-600">Penumpang</span>
+            <span class="block text-xs font-medium text-slate-600"> Penumpang </span>
+
             <span class="mt-2 flex items-center gap-2">
               <span aria-hidden="true">♙</span>
-              <select
+
+              <input
                 v-model.number="passengers"
-                class="w-full cursor-pointer bg-transparent text-sm outline-none"
-              >
-                <option :value="1">1 Dewasa</option>
-                <option :value="2">2 Dewasa</option>
-                <option :value="3">3 Dewasa</option>
-                <option :value="4">4 Dewasa</option>
-                <option :value="5">5 Dewasa</option>
-              </select>
+                type="number"
+                min="1"
+                step="1"
+                required
+                placeholder="Jumlah penumpang"
+                class="w-full min-w-0 bg-transparent text-sm outline-none"
+              />
             </span>
           </label>
 
@@ -358,7 +498,8 @@ const destinations = [
         </form>
 
         <p class="mt-3 text-xs text-slate-500">
-          Ketik nama kota untuk melihat rekomendasi, atau masukkan nama kota secara manual.
+          Ketik minimal 2 karakter untuk melihat saran kota/negara. Lokasi tetap bisa diketik
+          manual.
         </p>
       </div>
     </section>
@@ -371,7 +512,9 @@ const destinations = [
             <p class="text-sm font-semibold uppercase tracking-wider text-[#347bd0]">
               Aktivitas Saya
             </p>
+
             <h2 class="mt-1 text-2xl font-bold text-[#263a53]">Ringkasan Perjalanan</h2>
+
             <p class="mt-1 text-sm text-slate-500">
               Halo, {{ currentUser.name || 'Pengguna' }}! Ini perjalananmu di TripMate.
             </p>
@@ -381,42 +524,64 @@ const destinations = [
             <p class="text-3xl font-bold text-[#347bd0]">
               {{ myTrips.length }}
             </p>
+
             <p class="text-xs font-medium text-slate-600">Total Perjalanan</p>
           </div>
         </div>
 
-        <div v-if="latestTrips.length > 0" class="mt-6 grid gap-4 md:grid-cols-3">
+        <!-- Loading -->
+        <div
+          v-if="loadingTrips"
+          class="mt-6 rounded-xl bg-blue-50 px-5 py-8 text-center text-sm text-slate-600"
+        >
+          Memuat riwayat perjalanan...
+        </div>
+
+        <!-- Error -->
+        <div
+          v-else-if="tripError"
+          class="mt-6 rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-600"
+          role="alert"
+        >
+          Gagal memuat perjalanan: {{ tripError }}
+        </div>
+
+        <!-- Daftar perjalanan -->
+        <div v-else-if="latestTrips.length > 0" class="mt-6 grid gap-4 md:grid-cols-3">
           <article
             v-for="trip in latestTrips"
-            :key="trip.id"
+            :key="trip.id_perjalanan"
             class="rounded-xl border border-slate-200 p-5 transition hover:border-[#347bd0]"
           >
             <h3 class="font-bold text-[#263a53]">
-              {{ trip.name }}
+              {{ trip.judul }}
             </h3>
 
             <p class="mt-1 text-sm font-medium text-[#347bd0]">
-              {{ trip.destination }}
+              {{ trip.tujuan_perjalanan || 'Tujuan belum tersedia' }}
             </p>
 
             <div class="mt-3 space-y-1 text-xs text-slate-500">
               <p>
                 <span class="font-semibold">Mulai:</span>
-                {{ formatDate(trip.startDate) }}
+                {{ formatDate(trip.tanggal_mulai) }}
               </p>
+
               <p>
                 <span class="font-semibold">Selesai:</span>
-                {{ formatDate(trip.endDate) }}
+                {{ formatDate(trip.tanggal_selesai) }}
               </p>
             </div>
           </article>
         </div>
 
+        <!-- Belum ada perjalanan -->
         <div
           v-else
           class="mt-6 rounded-xl border border-dashed border-slate-300 px-5 py-8 text-center"
         >
           <p class="font-semibold text-slate-600">Kamu belum memiliki perjalanan.</p>
+
           <p class="mt-1 text-sm text-slate-500">
             Mulai buat rencana perjalanan pertamamu sekarang!
           </p>
@@ -434,11 +599,115 @@ const destinations = [
       </div>
     </section>
 
+    <!-- Riwayat Pemesanan -->
+    <section v-if="currentUser" class="mx-auto max-w-7xl px-6 pb-6 pt-4 lg:px-10">
+      <div class="rounded-2xl bg-white p-6 shadow-md sm:p-8">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p class="text-sm font-semibold uppercase tracking-wider text-[#347bd0]">
+              Aktivitas Saya
+            </p>
+            <h2 class="mt-1 text-2xl font-bold text-[#263a53]">Riwayat Pemesanan</h2>
+            <p class="mt-1 text-sm text-slate-500">
+              Lihat tiket penerbangan yang telah kamu pesan.
+            </p>
+          </div>
+
+          <div class="rounded-xl bg-blue-50 px-5 py-3 text-center">
+            <p class="text-3xl font-bold text-[#347bd0]">
+              {{ bookings.length }}
+            </p>
+            <p class="text-xs font-medium text-slate-600">Total Pemesanan</p>
+          </div>
+        </div>
+
+        <!-- Loading -->
+        <div
+          v-if="loadingBookings"
+          class="mt-6 rounded-xl bg-blue-50 px-5 py-8 text-center text-sm text-slate-600"
+        >
+          Memuat riwayat pemesanan...
+        </div>
+
+        <!-- Error -->
+        <div
+          v-else-if="bookingError"
+          class="mt-6 rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-600"
+          role="alert"
+        >
+          Gagal memuat riwayat pemesanan: {{ bookingError }}
+        </div>
+
+        <!-- Daftar pemesanan -->
+        <div v-else-if="latestBookings.length > 0" class="mt-6 grid gap-4 md:grid-cols-3">
+          <article
+            v-for="booking in latestBookings"
+            :key="booking.id_pemesanan"
+            class="rounded-xl border border-slate-200 p-5 transition hover:border-[#347bd0] hover:shadow-sm"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <h3 class="font-bold text-[#263a53]">
+                {{ booking.maskapai }}
+              </h3>
+
+              <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-600">
+                {{ booking.status }}
+              </span>
+            </div>
+
+            <p class="mt-1 text-xs font-medium text-slate-500">
+              {{ booking.kode_pemesanan }}
+            </p>
+
+            <div class="mt-4">
+              <p class="text-sm font-semibold text-[#263a53]">
+                {{ booking.bandara_keberangkatan }}
+                <span class="text-[#347bd0]">→</span>
+                {{ booking.bandara_kedatangan }}
+              </p>
+
+              <p class="mt-2 text-xs text-slate-500">
+                {{ formatBookingDate(booking.waktu_keberangkatan) }}
+              </p>
+            </div>
+
+            <div class="mt-4 border-t border-slate-100 pt-3">
+              <p class="text-xs text-slate-500">Total pembayaran</p>
+              <p class="mt-1 font-bold text-[#347bd0]">
+                {{ formatBookingPrice(booking.total_harga) }}
+              </p>
+            </div>
+          </article>
+        </div>
+
+        <!-- Belum ada pemesanan -->
+        <div
+          v-else
+          class="mt-6 rounded-xl border border-dashed border-slate-300 px-5 py-8 text-center"
+        >
+          <p class="font-semibold text-slate-600">Kamu belum memiliki pemesanan.</p>
+          <p class="mt-1 text-sm text-slate-500">Pesan tiket penerbangan pertamamu di TripMate!</p>
+        </div>
+
+        <!-- Tombol lihat semua -->
+        <div v-if="bookings.length > 0" class="mt-6">
+          <button
+            type="button"
+            class="rounded-lg bg-[#347bd0] px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+            @click="router.push('/bookings')"
+          >
+            Lihat Semua Pemesanan →
+          </button>
+        </div>
+      </div>
+    </section>
+
     <!-- Features -->
     <section class="mx-auto max-w-7xl px-6 pb-8 pt-6 lg:px-10">
       <h2 class="text-xl font-semibold text-[#263a53]">
         Semua yang Kamu Butuhkan untuk Berpergian
       </h2>
+
       <p class="text-sm text-slate-600">
         Nikmati perjalanan yang lebih praktis dengan fitur pintar dari TripMate.
       </p>
@@ -450,10 +719,12 @@ const destinations = [
           >
             {{ feature.icon }}
           </div>
+
           <div>
             <h3 class="text-xs font-bold leading-relaxed text-[#263a53]">
               {{ feature.title }}
             </h3>
+
             <p class="mt-1 text-[11px] leading-relaxed text-slate-700">
               {{ feature.description }}
             </p>
@@ -473,6 +744,7 @@ const destinations = [
           >
             Lebih dari pemesanan tiket
           </h2>
+
           <p class="mt-4 max-w-md text-xs leading-relaxed tracking-[.18em] text-slate-500">
             Nikmati perjalanan yang lebih praktis dengan TripMate. Temukan destinasi baru dan
             rencanakan perjalananmu dengan mudah.
@@ -486,12 +758,14 @@ const destinations = [
             alt="Pemandangan balon udara"
             loading="lazy"
           />
+
           <img
             class="row-span-2 h-full min-h-52 w-full rounded-xl object-cover"
             src="https://images.unsplash.com/photo-1537996194471-e657df975ab4?auto=format&fit=crop&w=700&q=85"
             alt="Pemandangan pura di Bali"
             loading="lazy"
           />
+
           <img
             class="h-24 w-full rounded-xl object-cover sm:h-28"
             src="https://images.unsplash.com/photo-1508804185872-d7badad00f7d?auto=format&fit=crop&w=600&q=80"
@@ -520,10 +794,14 @@ const destinations = [
             class="h-36 w-full rounded-xl object-cover"
             loading="lazy"
           />
+
           <h3 class="mt-2 text-sm font-semibold text-[#263a53]">
             {{ place.name }}
           </h3>
-          <p class="text-xs text-slate-500">{{ place.location }}</p>
+
+          <p class="text-xs text-slate-500">
+            {{ place.location }}
+          </p>
         </article>
       </div>
     </section>

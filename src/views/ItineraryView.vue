@@ -115,27 +115,36 @@ function applyBookingContext() {
 
   loadFlight()
 
+  if (selectedFlight.value) {
+    const flight = selectedFlight.value
+    const outbound = flight.outboundFlight || flight
+    const returning = flight.returnFlight || null
+
+    // Otomatis mengisi destinasi dari tiket yang dipilih
+    if (outbound.destination) {
+      destination.value = outbound.destination
+    }
+
+    // Otomatis mengisi tanggal berangkat
+    if (outbound.departureDate) {
+      startDate.value = outbound.departureDate
+    }
+
+    // Mengisi tanggal pulang jika tiket return tersedia
+    if (returning?.departureDate) {
+      endDate.value = returning.departureDate
+    } else {
+      endDate.value = ''
+    }
+  }
+
+  // Tetap mendukung tanggal dari query route jika tersedia
   if (route.query.startDate) {
     startDate.value = String(route.query.startDate)
   }
 
   if (route.query.endDate) {
     endDate.value = String(route.query.endDate)
-  }
-
-  if (selectedFlight.value) {
-    const flight = selectedFlight.value
-    const outbound = flight.outboundFlight || flight
-    const returning = flight.returnFlight || null
-
-    destination.value = outbound.destination || flight.destination || destination.value
-    startDate.value = startDate.value || outbound.departureDate || ''
-
-    if (returning) {
-      endDate.value = endDate.value || returning.departureDate || ''
-    } else if (!route.query.endDate) {
-      endDate.value = ''
-    }
   }
 
   itineraryDays.value = []
@@ -276,6 +285,15 @@ async function generateItinerary() {
     return
   }
 
+  // Ambil token JWT dari localStorage
+  const token = localStorage.getItem('tripmate-token')
+
+  if (!token) {
+    errorMessage.value = 'Sesi login tidak ditemukan. Silakan login kembali.'
+    router.push('/login')
+    return
+  }
+
   isGenerating.value = true
 
   try {
@@ -287,6 +305,7 @@ async function generateItinerary() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
         destination: destination.value.trim(),
@@ -313,6 +332,13 @@ async function generateItinerary() {
     })
 
     const result = await response.json()
+
+    if (response.status === 401) {
+      localStorage.removeItem('tripmate-token')
+      localStorage.removeItem('tripmate-current-user')
+      router.push('/login')
+      throw new Error('Sesi login berakhir. Silakan login kembali.')
+    }
 
     if (!response.ok || !result.success) {
       throw new Error(result.message || 'Gagal membuat rencana perjalanan.')

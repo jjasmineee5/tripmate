@@ -5,11 +5,11 @@ import { useRoute, useRouter } from 'vue-router'
 const route = useRoute()
 const router = useRouter()
 
-const origin = ref(String(route.query.origin || 'Balikpapan'))
-const destination = ref(String(route.query.destination || 'Denpasar'))
+const origin = ref(String(route.query.origin || ''))
+const destination = ref(String(route.query.destination || ''))
 const departureDate = ref(String(route.query.departureDate || ''))
 const returnDate = ref(String(route.query.returnDate || ''))
-const passengers = ref(Math.min(5, Math.max(1, Number(route.query.passengers) || 1)))
+const passengers = ref(Math.max(1, Number(route.query.passengers) || 1))
 
 const today = (() => {
   const date = new Date()
@@ -17,8 +17,7 @@ const today = (() => {
   return date.toISOString().split('T')[0]
 })()
 
-const cities = ['Jakarta', 'Balikpapan', 'Surabaya', 'Denpasar', 'Yogyakarta', 'Makassar']
-
+// Data penerbangan simulasi sementara
 const sampleFlights = [
   {
     id: 1,
@@ -52,14 +51,17 @@ const sampleFlights = [
   },
 ]
 
-const searched = ref(true)
+// Hasil penerbangan disembunyikan sebelum pencarian
+const searched = ref(false)
 const stage = ref('outbound')
 const selectedOutbound = ref(null)
 
 // Filter penerbangan
 const selectedAirline = ref('Semua')
-const minPrice = ref(0)
-const maxPrice = ref(2000000)
+const minPrice = ref(null)
+const maxPrice = ref(null)
+const appliedMinPrice = ref(null)
+const appliedMaxPrice = ref(null)
 const selectedClass = ref('Semua')
 
 const airlines = computed(() => [
@@ -75,11 +77,15 @@ const filteredFlights = computed(() => {
       const matchesAirline =
         selectedAirline.value === 'Semua' || flight.airline === selectedAirline.value
 
-      const matchesPrice = flight.price >= minPrice.value && flight.price <= maxPrice.value
+      const matchesMinPrice =
+        appliedMinPrice.value === null || flight.price >= appliedMinPrice.value
+
+      const matchesMaxPrice =
+        appliedMaxPrice.value === null || flight.price <= appliedMaxPrice.value
 
       const matchesClass = selectedClass.value === 'Semua' || flight.class === selectedClass.value
 
-      return matchesAirline && matchesPrice && matchesClass
+      return matchesAirline && matchesMinPrice && matchesMaxPrice && matchesClass
     })
     .map((flight) => ({
       ...flight,
@@ -107,23 +113,42 @@ function formatDate(dateString) {
 
 function resetFilters() {
   selectedAirline.value = 'Semua'
-  minPrice.value = 0
-  maxPrice.value = 2000000
+  minPrice.value = null
+  maxPrice.value = null
+  appliedMinPrice.value = null
+  appliedMaxPrice.value = null
   selectedClass.value = 'Semua'
 }
 
+function applyPriceFilter() {
+  const min = minPrice.value === '' || minPrice.value === null ? null : Number(minPrice.value)
+
+  const max = maxPrice.value === '' || maxPrice.value === null ? null : Number(maxPrice.value)
+
+  if (min !== null && max !== null && min > max) {
+    alert('Harga minimum tidak boleh lebih besar dari harga maksimum.')
+    return
+  }
+
+  if (
+    (min !== null && (!Number.isFinite(min) || min < 0)) ||
+    (max !== null && (!Number.isFinite(max) || max < 0))
+  ) {
+    alert('Harga tidak boleh kurang dari 0.')
+    return
+  }
+
+  appliedMinPrice.value = min
+  appliedMaxPrice.value = max
+}
+
 function searchFlights() {
-  if (!origin.value || !destination.value || !departureDate.value) {
+  if (!origin.value.trim() || !destination.value.trim() || !departureDate.value) {
     alert('Lengkapi kota asal, kota tujuan, dan tanggal keberangkatan.')
     return
   }
 
-  if (!cities.includes(origin.value) || !cities.includes(destination.value)) {
-    alert('Pilih kota asal dan tujuan yang tersedia.')
-    return
-  }
-
-  if (origin.value === destination.value) {
+  if (origin.value.trim().toLowerCase() === destination.value.trim().toLowerCase()) {
     alert('Kota asal dan tujuan harus berbeda.')
     return
   }
@@ -138,8 +163,8 @@ function searchFlights() {
     return
   }
 
-  if (!Number.isInteger(passengers.value) || passengers.value < 1 || passengers.value > 5) {
-    alert('Jumlah penumpang harus antara 1 sampai 5 orang.')
+  if (!Number.isInteger(passengers.value) || passengers.value < 1) {
+    alert('Jumlah penumpang minimal 1 orang.')
     return
   }
 
@@ -152,8 +177,8 @@ function searchFlights() {
   router.replace({
     path: '/flights',
     query: {
-      origin: origin.value,
-      destination: destination.value,
+      origin: origin.value.trim(),
+      destination: destination.value.trim(),
       departureDate: departureDate.value,
       ...(returnDate.value ? { returnDate: returnDate.value } : {}),
       passengers: String(passengers.value),
@@ -265,29 +290,25 @@ function changeOutbound() {
           <label class="text-sm font-medium text-slate-700">
             Kota Asal
 
-            <select
-              v-model="origin"
+            <input
+              v-model.trim="origin"
+              type="text"
               required
+              placeholder="Masukkan kota asal"
               class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3"
-            >
-              <option v-for="city in cities" :key="city" :value="city">
-                {{ city }}
-              </option>
-            </select>
+            />
           </label>
 
           <label class="text-sm font-medium text-slate-700">
             Kota Tujuan
 
-            <select
-              v-model="destination"
+            <input
+              v-model.trim="destination"
+              type="text"
               required
+              placeholder="Masukkan kota tujuan"
               class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3"
-            >
-              <option v-for="city in cities" :key="city" :value="city">
-                {{ city }}
-              </option>
-            </select>
+            />
           </label>
 
           <label class="text-sm font-medium text-slate-700">
@@ -316,12 +337,15 @@ function changeOutbound() {
           <label class="text-sm font-medium text-slate-700">
             Penumpang
 
-            <select
+            <input
               v-model.number="passengers"
+              type="number"
+              min="1"
+              step="1"
+              required
+              placeholder="Jumlah penumpang"
               class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3"
-            >
-              <option v-for="number in 5" :key="number" :value="number">{{ number }} Dewasa</option>
-            </select>
+            />
           </label>
 
           <button
@@ -334,7 +358,7 @@ function changeOutbound() {
       </section>
 
       <!-- Filter Penerbangan -->
-      <section class="mt-6 rounded-2xl bg-white p-5 shadow-sm sm:p-6">
+      <section v-if="searched" class="mt-6 rounded-2xl bg-white p-5 shadow-sm sm:p-6">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 class="text-lg font-bold text-[#263a53]">Filter Penerbangan</h2>
@@ -386,7 +410,6 @@ function changeOutbound() {
                 v-model.number="minPrice"
                 type="number"
                 min="0"
-                :max="maxPrice"
                 placeholder="Minimum"
                 class="min-w-0 rounded-xl border border-slate-300 p-3"
               />
@@ -394,22 +417,30 @@ function changeOutbound() {
               <input
                 v-model.number="maxPrice"
                 type="number"
-                :min="minPrice"
-                max="100000000"
+                min="0"
                 placeholder="Maksimum"
                 class="min-w-0 rounded-xl border border-slate-300 p-3"
               />
             </div>
+
+            <button
+              type="button"
+              class="mt-2 rounded-lg bg-[#347bd0] px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              @click="applyPriceFilter"
+            >
+              Terapkan Filter
+            </button>
           </div>
         </div>
 
         <p class="mt-4 text-xs text-slate-500">
-          Harga yang ditampilkan merupakan harga simulasi per penumpang.
+          Filter harga menggunakan harga tiket per orang, bukan total seluruh penumpang. Harga yang
+          ditampilkan merupakan harga simulasi.
         </p>
       </section>
 
       <!-- Hasil Penerbangan -->
-      <section class="mt-8">
+      <section v-if="searched" class="mt-8">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 class="text-xl font-bold text-[#263a53] sm:text-2xl">
@@ -494,7 +525,13 @@ function changeOutbound() {
             </div>
 
             <div class="sm:text-right">
-              <p class="text-xs text-slate-500">Total {{ passengers }} penumpang</p>
+              <p class="text-xs text-slate-500">Harga per orang</p>
+
+              <p class="text-sm font-semibold text-slate-700">
+                {{ formatPrice(flight.price) }}
+              </p>
+
+              <p class="mt-2 text-xs text-slate-500">Total {{ passengers }} penumpang</p>
 
               <p class="mt-1 text-xl font-bold text-blue-700">
                 {{ formatPrice(flight.totalPrice) }}

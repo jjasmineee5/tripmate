@@ -7,54 +7,64 @@ const router = useRouter()
 const email = ref('')
 const password = ref('')
 const errorMessage = ref('')
+const isSubmitting = ref(false)
 
-function login() {
+async function login() {
   errorMessage.value = ''
 
-  let users
+  if (isSubmitting.value) return
+
+  isSubmitting.value = true
 
   try {
-    const storedUsers = JSON.parse(localStorage.getItem('tripmate-users') || '[]')
+    const response = await fetch('http://localhost:3000/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: email.value.trim().toLowerCase(),
+        password: password.value,
+      }),
+    })
 
-    users = Array.isArray(storedUsers) ? storedUsers : []
-  } catch {
-    errorMessage.value = 'Data akun tidak valid. Silakan periksa kembali.'
-    return
-  }
+    const result = await response.json()
 
-  const normalizedEmail = email.value.trim().toLowerCase()
+    if (!response.ok) {
+      errorMessage.value = result.message || 'Email atau kata sandi salah.'
+      return
+    }
 
-  const user = users.find(
-    (item) => typeof item.email === 'string' && item.email.trim().toLowerCase() === normalizedEmail,
-  )
+    // Simpan token dan informasi akun
+    localStorage.setItem('tripmate-token', result.token)
+    localStorage.setItem('tripmate-current-user', JSON.stringify(result.user))
 
-  if (!user) {
-    errorMessage.value = 'Email belum terdaftar. Silakan daftar akun terlebih dahulu.'
-    return
-  }
+    // Arahkan berdasarkan role akun
+    if (result.user?.role === 'admin') {
+      await router.push('/admin/dashboard')
+    } else if (result.user?.role === 'pengguna') {
+      const redirect = router.currentRoute.value.query.redirect
 
-  if (user.password !== password.value) {
-    errorMessage.value = 'Email atau kata sandi salah.'
-    return
-  }
-
-  // Simpan informasi pengguna yang sedang login
-  localStorage.setItem(
-    'tripmate-current-user',
-    JSON.stringify({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-    }),
-  )
-
-  // Kembali ke halaman yang dituju sebelum login
-  const redirect = router.currentRoute.value.query.redirect
-
-  if (typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')) {
-    router.push(redirect)
-  } else {
-    router.push('/')
+      if (
+        typeof redirect === 'string' &&
+        redirect.startsWith('/') &&
+        !redirect.startsWith('//') &&
+        !redirect.startsWith('/admin')
+      ) {
+        await router.push(redirect)
+      } else {
+        await router.push('/')
+      }
+    } else {
+      localStorage.removeItem('tripmate-token')
+      localStorage.removeItem('tripmate-current-user')
+      errorMessage.value = 'Role akun tidak dikenali.'
+    }
+  } catch (error) {
+    console.error('Login error:', error)
+    errorMessage.value = 'Tidak dapat terhubung ke server. Silakan coba lagi.'
+  } finally {
+    isSubmitting.value = false
   }
 }
 </script>
@@ -74,7 +84,7 @@ function login() {
 
       <form class="space-y-4" @submit.prevent="login">
         <label class="block">
-          <span class="mb-2 block text-sm font-medium text-[#263951]"> Email </span>
+          <span class="mb-2 block text-sm font-medium text-[#263951]">Email</span>
 
           <input
             v-model="email"
@@ -87,7 +97,7 @@ function login() {
         </label>
 
         <label class="block">
-          <span class="mb-2 block text-sm font-medium text-[#263951]"> Kata sandi </span>
+          <span class="mb-2 block text-sm font-medium text-[#263951]">Kata sandi</span>
 
           <input
             v-model="password"
@@ -105,9 +115,10 @@ function login() {
 
         <button
           type="submit"
-          class="w-full rounded-xl bg-[#347bd0] px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
+          :disabled="isSubmitting"
+          class="w-full rounded-xl bg-[#347bd0] px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Masuk
+          {{ isSubmitting ? 'Memproses...' : 'Masuk' }}
         </button>
       </form>
 

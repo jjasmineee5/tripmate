@@ -5,6 +5,7 @@ import tripmateLogo from './assets/images/TripMate logo.png'
 
 const route = useRoute()
 const router = useRouter()
+
 const menuOpen = ref(false)
 const currentUser = ref(null)
 
@@ -17,6 +18,9 @@ const navLinks = [
 ]
 
 const isLoggedIn = computed(() => currentUser.value !== null)
+
+// Navbar mengikuti role akun yang sedang login
+const isAdminArea = computed(() => currentUser.value?.role === 'admin')
 
 function loadCurrentUser() {
   try {
@@ -34,9 +38,12 @@ function handleStorageChange(event) {
 }
 
 function logout() {
+  localStorage.removeItem('tripmate-token')
   localStorage.removeItem('tripmate-current-user')
+
   currentUser.value = null
   menuOpen.value = false
+
   router.push('/')
 }
 
@@ -62,14 +69,59 @@ onUnmounted(() => {
 
 <template>
   <div class="min-h-screen w-full bg-[#dceafa]">
-    <header class="relative z-20 w-full bg-[#f5f9ff]">
+    <!-- NAVBAR ADMIN -->
+    <header v-if="isAdminArea" class="sticky top-0 z-50 w-full bg-[#f5f9ff] shadow-sm">
+      <nav
+        class="mx-auto flex min-h-[80px] w-full max-w-[1440px] items-center justify-between gap-4 px-5 lg:px-8"
+      >
+        <!-- Logo Admin: kembali ke Dashboard -->
+        <RouterLink to="/admin/dashboard" aria-label="Dashboard Admin" class="shrink-0">
+          <img :src="tripmateLogo" alt="TripMate" class="h-[75px] w-[222px] object-contain" />
+        </RouterLink>
+
+        <!-- Identitas Admin -->
+        <div class="flex items-center gap-3 sm:gap-4">
+          <span
+            class="rounded-full bg-blue-100 px-3 py-1.5 text-xs font-bold tracking-wider text-[#347bd0]"
+          >
+            ADMIN
+          </span>
+
+          <span class="max-w-[150px] truncate text-sm font-semibold text-[#263951] sm:max-w-none">
+            Hai, {{ currentUser?.name || 'Admin' }}
+          </span>
+
+          <!-- Tombol Profil -->
+          <RouterLink
+            to="/profile"
+            class="rounded-full border border-[#347bd0] px-4 py-2 text-sm font-medium text-[#347bd0] transition hover:bg-blue-50 sm:px-5"
+          >
+            Profil Saya
+          </RouterLink>
+
+          <!-- Tombol Keluar -->
+          <button
+            type="button"
+            class="rounded-full border border-[#347bd0] px-4 py-2 text-sm font-medium text-[#347bd0] transition hover:bg-blue-50 sm:px-6"
+            @click="logout"
+          >
+            Keluar
+          </button>
+        </div>
+      </nav>
+    </header>
+
+    <!-- NAVBAR PENGGUNA -->
+    <header v-else class="sticky top-0 z-50 w-full bg-[#f5f9ff]">
       <nav
         class="mx-auto flex min-h-[72px] w-full max-w-[1440px] items-center justify-between gap-5 px-5 lg:px-8"
       >
+        <!-- Logo Pengguna: kembali ke Beranda -->
         <RouterLink to="/" aria-label="TripMate Beranda" class="shrink-0">
           <img :src="tripmateLogo" alt="TripMate" class="h-[75px] w-[222px] object-contain" />
         </RouterLink>
 
+        <!-- Menu Navigasi -->
         <div class="hidden items-center gap-7 lg:flex">
           <RouterLink
             v-for="link in navLinks"
@@ -86,6 +138,7 @@ onUnmounted(() => {
           </RouterLink>
         </div>
 
+        <!-- Login / Informasi Pengguna -->
         <div class="hidden shrink-0 items-center gap-2 md:flex">
           <template v-if="!isLoggedIn">
             <RouterLink
@@ -125,6 +178,7 @@ onUnmounted(() => {
           </template>
         </div>
 
+        <!-- Tombol Menu Mobile -->
         <button
           type="button"
           class="rounded-lg border border-slate-200 px-3 py-2 text-xl md:hidden"
@@ -136,6 +190,7 @@ onUnmounted(() => {
         </button>
       </nav>
 
+      <!-- Menu Mobile -->
       <div v-if="menuOpen" class="border-t border-slate-200 bg-[#f5f9ff] p-4 md:hidden">
         <div class="flex flex-col gap-1">
           <RouterLink
@@ -191,11 +246,39 @@ onUnmounted(() => {
       </div>
     </header>
 
+    <!-- KONTEN HALAMAN -->
     <main class="w-full">
       <RouterView />
     </main>
 
-    <footer class="w-full bg-gradient-to-b from-[#293f58] to-[#3478ba] text-white">
+    <!-- FOOTER ADMIN -->
+    <footer
+      v-if="isAdminArea"
+      class="w-full bg-gradient-to-b from-[#293f58] to-[#3478ba] text-white"
+    >
+      <div class="mx-auto flex w-full max-w-[1200px] flex-col items-center px-5 py-8 text-center">
+        <!-- Logo -->
+        <RouterLink to="/admin/dashboard" aria-label="Dashboard Admin" class="inline-block">
+          <img :src="tripmateLogo" alt="TripMate" class="h-[85px] w-[230px] object-contain" />
+        </RouterLink>
+
+        <!-- Keterangan -->
+        <p class="mt-2 text-sm font-medium text-blue-100">Administrator Panel</p>
+      </div>
+
+      <!-- Copyright -->
+      <div
+        class="mx-auto w-full max-w-[1200px] border-t border-white/20 px-5 py-5 text-center text-sm text-blue-100"
+      >
+        © 2026 TripMate. Hak cipta dilindungi.
+      </div>
+    </footer>
+
+    <!-- FOOTER PENGGUNA -->
+    <footer
+      v-if="!isAdminArea"
+      class="w-full bg-gradient-to-b from-[#293f58] to-[#3478ba] text-white"
+    >
       <div
         class="mx-auto grid w-full max-w-[1280px] gap-8 px-6 py-10 md:grid-cols-2 lg:grid-cols-[2fr_0.8fr_1fr_1fr] lg:px-10"
       >
@@ -203,6 +286,7 @@ onUnmounted(() => {
           <RouterLink to="/" aria-label="TripMate Beranda" class="inline-block">
             <img :src="tripmateLogo" alt="TripMate" class="h-[105px] w-[290px] object-contain" />
           </RouterLink>
+
           <p class="mt-3 max-w-sm text-base leading-relaxed text-blue-100">
             Rencanakan perjalananmu dengan mudah bersama TripMate.
           </p>
@@ -210,6 +294,7 @@ onUnmounted(() => {
 
         <div class="border-white/20 lg:border-l lg:pl-8">
           <h2 class="mb-3 font-semibold">Jelajahi</h2>
+
           <div class="flex flex-col items-start gap-2 text-sm text-blue-100">
             <RouterLink
               v-for="link in navLinks"
@@ -224,10 +309,13 @@ onUnmounted(() => {
 
         <div class="border-white/20 lg:border-l lg:pl-8">
           <h2 class="mb-3 font-semibold">Hubungi Kami</h2>
+
           <a href="mailto:hello@tripmate.example" class="text-sm text-blue-100 hover:text-white">
             ✉ Email
           </a>
+
           <h3 class="mb-2 mt-4 font-semibold tracking-widest">Ikuti Kami</h3>
+
           <a
             href="https://www.instagram.com/"
             target="_blank"
@@ -240,9 +328,11 @@ onUnmounted(() => {
 
         <div class="border-white/20 lg:border-l lg:pl-8">
           <h2 class="mb-3 font-semibold">Tentang &amp; Bantuan</h2>
+
           <div class="flex flex-col gap-3 text-sm text-blue-100">
-            <RouterLink to="/about" class="hover:text-white">Tentang Kami</RouterLink>
-            <RouterLink to="/help" class="hover:text-white">Pusat Bantuan</RouterLink>
+            <RouterLink to="/about" class="hover:text-white"> Tentang Kami </RouterLink>
+
+            <RouterLink to="/help" class="hover:text-white"> Pusat Bantuan </RouterLink>
           </div>
         </div>
       </div>

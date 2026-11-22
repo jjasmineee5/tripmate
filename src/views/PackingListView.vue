@@ -1,5 +1,8 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 const storageKey = 'tripmate-packing-items'
 const flightStorageKey = 'tripmate-selected-flight'
@@ -193,8 +196,15 @@ async function generatePackingList() {
     return
   }
 
-  // Muat ulang data supaya perubahan tiket atau rencana perjalanan
-  // yang dibuat setelah halaman dibuka ikut terbaca.
+  // Ambil token JWT dari localStorage
+  const token = localStorage.getItem('tripmate-token')
+
+  if (!token) {
+    errorMessage.value = 'Sesi login tidak ditemukan. Silakan login kembali.'
+    router.push('/login')
+    return
+  }
+
   loadLinkedContext()
   isGenerating.value = true
 
@@ -203,6 +213,7 @@ async function generatePackingList() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
         destination: destination.value.trim(),
@@ -214,6 +225,14 @@ async function generatePackingList() {
     })
 
     const data = await response.json().catch(() => ({}))
+
+    // Jika token tidak valid atau kedaluwarsa
+    if (response.status === 401) {
+      localStorage.removeItem('tripmate-token')
+      localStorage.removeItem('tripmate-current-user')
+      router.push('/login')
+      throw new Error('Sesi login berakhir. Silakan login kembali.')
+    }
 
     if (!response.ok) {
       throw new Error(data.message || 'Gagal membuat daftar perlengkapan.')
@@ -256,6 +275,7 @@ async function generatePackingList() {
   } catch (error) {
     errorMessage.value =
       error.message || 'Tidak dapat menghubungi AI. Pastikan backend TripMate sedang berjalan.'
+    successMessage.value = ''
   } finally {
     isGenerating.value = false
   }
