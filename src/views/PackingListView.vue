@@ -1,8 +1,11 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
+const route = useRoute()
+const tripId = ref(route.query.tripId || '')
+const isSavingDB = ref(false)
 
 const storageKey = 'tripmate-packing-items'
 const flightStorageKey = 'tripmate-selected-flight'
@@ -30,6 +33,91 @@ function readStorage(key) {
     return value ? JSON.parse(value) : null
   } catch {
     return null
+  }
+}
+
+async function loadPackingListFromDB() {
+  if (!tripId.value) return
+
+  const token = localStorage.getItem('tripmate-token')
+
+  if (!token) {
+    errorMessage.value = 'Sesi login tidak ditemukan. Silakan login kembali.'
+    return
+  }
+
+  try {
+    const response = await fetch(`http://localhost:3000/api/daftar-bawaan/${tripId.value}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+
+    const data = await response.json().catch(() => ({}))
+
+    if (response.status === 401) {
+      router.push('/login')
+      return
+    }
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Gagal mengambil daftar bawaan.')
+    }
+
+    if (data.daftar && Array.isArray(data.items)) {
+      items.value = data.items.map((item) => ({
+        id: item.id_item,
+        name: item.nama,
+        packed: Boolean(item.status_pemeriksaan),
+      }))
+
+      successMessage.value = 'Daftar bawaan dari database berhasil dimuat.'
+    } else {
+      items.value = []
+    }
+  } catch (error) {
+    errorMessage.value = error.message || 'Gagal memuat daftar dari database.'
+  }
+}
+
+async function savePackingListToDB() {
+  if (!tripId.value || !loaded.value) return
+
+  const token = localStorage.getItem('tripmate-token')
+
+  if (!token) return
+
+  isSavingDB.value = true
+
+  try {
+    const response = await fetch('http://localhost:3000/api/daftar-bawaan', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        id_perjalanan: Number(tripId.value),
+        judul: `Daftar Bawaan - ${destination.value || 'Perjalanan'}`,
+        deskripsi: `Daftar perlengkapan untuk ${destination.value || 'perjalanan'}`,
+        items: items.value.map((item) => ({
+          nama: item.name,
+          kategori: 'Lainnya',
+          status_pemeriksaan: item.packed ? 1 : 0,
+        })),
+      }),
+    })
+
+    const data = await response.json().catch(() => ({}))
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Gagal menyimpan daftar bawaan.')
+    }
+  } catch (error) {
+    console.error('Gagal menyimpan daftar ke database:', error.message)
+    errorMessage.value = 'Daftar gagal disimpan ke database.'
+  } finally {
+    isSavingDB.value = false
   }
 }
 
@@ -136,7 +224,7 @@ function loadLinkedContext() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   try {
     const savedItems = readStorage(storageKey)
 
@@ -154,6 +242,39 @@ onMounted(() => {
   }
 
   loadLinkedContext()
+
+  // Ambil ID perjalanan dari itinerary yang tersimpan
+  if (!tripId.value) {
+    const savedItinerary = readStorage(itineraryStorageKey)
+
+    if (savedItinerary?.dbTripId) {
+      tripId.value = String(savedItinerary.dbTripId)
+    }
+  }
+
+  // Data dari tombol Perjalanan Saya mengutamakan perjalanan yang dipilih.
+  const queryDestination = route.query.destination
+  const queryDuration = route.query.duration
+  const queryTripType = route.query.tripType
+
+  if (typeof queryDestination === 'string' && queryDestination.trim()) {
+    destination.value = queryDestination.trim()
+  }
+  if (
+    queryDuration &&
+    Number.isInteger(Number(queryDuration)) &&
+    Number(queryDuration) >= 1 &&
+    Number(queryDuration) <= 90
+  ) {
+    duration.value = Number(queryDuration)
+  }
+  if (typeof queryTripType === 'string' && queryTripType) {
+    tripType.value = queryTripType
+  }
+
+  // Ambil daftar bawaan dari database jika halaman dibuka dari perjalanan
+  await loadPackingListFromDB()
+
   loaded.value = true
 })
 
@@ -167,6 +288,23 @@ watch(
     } catch {
       errorMessage.value = 'Daftar perlengkapan tidak dapat disimpan di browser.'
     }
+  },
+  { deep: true },
+)
+
+// Simpan perubahan daftar ke database
+let saveTimer
+
+watch(
+  items,
+  () => {
+    if (!loaded.value || !tripId.value) return
+
+    clearTimeout(saveTimer)
+
+    saveTimer = setTimeout(() => {
+      savePackingListToDB()
+    }, 500)
   },
   { deep: true },
 )
@@ -205,7 +343,6 @@ async function generatePackingList() {
     return
   }
 
-  loadLinkedContext()
   isGenerating.value = true
 
   try {

@@ -51,6 +51,92 @@ function formatDateTime(date) {
   })
 }
 
+// Format waktu penerbangan tanpa menggeser jam dari nilai datetime database.
+function getTimezoneLabel(airportText) {
+  // Ambil kode IATA yang ditulis di dalam tanda kurung, misalnya (DPS).
+  const match = String(airportText || '').match(/\(([A-Z]{3})\)/)
+  const code = match?.[1]
+
+  // Zona waktu bandara Indonesia.
+  const timezoneByCode = {
+    // WIB
+    CGK: 'WIB',
+    HLP: 'WIB',
+    BDG: 'WIB',
+    JOG: 'WIB',
+    YIA: 'WIB',
+    SOC: 'WIB',
+    SRG: 'WIB',
+    SUB: 'WIB',
+    MLG: 'WIB',
+    KNO: 'WIB',
+    PLM: 'WIB',
+    PKU: 'WIB',
+    PDG: 'WIB',
+    BTH: 'WIB',
+    TKG: 'WIB',
+    // WITA
+    DPS: 'WITA',
+    UPG: 'WITA',
+    BPN: 'WITA',
+    BDJ: 'WITA',
+    TRK: 'WITA',
+    MDC: 'WITA',
+    KDI: 'WITA',
+    LOP: 'WITA',
+    KOE: 'WITA',
+    LBJ: 'WITA',
+    BMU: 'WITA',
+    TTE: 'WIT',
+    // WIT
+    AMQ: 'WIT',
+    DJJ: 'WIT',
+    SOQ: 'WIT',
+    TIM: 'WIT',
+    MKQ: 'WIT',
+    BIK: 'WIT',
+    PLW: 'WITA',
+    // Beberapa bandara luar negeri (singkatan zona waktu)
+    KUL: 'MYT',
+    SIN: 'SGT',
+    HKG: 'HKT',
+    NRT: 'JST',
+    KIX: 'JST',
+    ICN: 'KST',
+    DXB: 'GST',
+    DOH: 'AST',
+  }
+
+  return timezoneByCode[code] || ''
+}
+
+function formatFlightDateTime(date, airportText) {
+  if (!date) return '-'
+  const raw = String(date)
+  const normalized = raw.replace('T', ' ')
+  const datePart = normalized.slice(0, 10)
+  const timePart = normalized.slice(11, 16)
+
+  const parsedDate = new Date(`${datePart}T12:00:00`)
+  const displayDate = Number.isNaN(parsedDate.getTime())
+    ? datePart
+    : parsedDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+
+  const timezone = getTimezoneLabel(airportText)
+  return `${displayDate}, ${timePart}${timezone ? ` ${timezone}` : ''}`
+}
+
+function formatFlightDuration(duration) {
+  if (duration === null || duration === undefined || duration === '') return '-'
+  const minutes = Number(duration)
+  if (!Number.isFinite(minutes)) return String(duration)
+  const hours = Math.floor(minutes / 60)
+  const remaining = minutes % 60
+  if (hours && remaining) return `${hours} jam ${remaining} menit`
+  if (hours) return `${hours} jam`
+  return `${remaining} menit`
+}
+
 async function loadBookings() {
   errorMessage.value = ''
   bookings.value = []
@@ -91,6 +177,7 @@ async function loadBookings() {
     bookings.value = (result.data || []).map((item) => ({
       id: item.kode_pemesanan,
       bookingId: item.id_pemesanan,
+      tripId: item.id_perjalanan,
       status: item.status,
       createdAt: item.tanggal_pemesanan,
 
@@ -98,7 +185,7 @@ async function loadBookings() {
         fullName: item.nama_penumpang || '-',
       },
 
-      passengerNames: item.nama_penumpang ? item.nama_penumpang.split(', ') : [],
+      passengerNames: item.nama_penumpang ? item.nama_penumpang.split(', ').filter(Boolean) : [],
 
       flight: {
         airline: item.maskapai,
@@ -108,10 +195,25 @@ async function loadBookings() {
         departureDate: item.waktu_keberangkatan,
         arrivalDate: item.waktu_kedatangan,
         duration: item.durasi,
-        totalPrice: item.total_harga,
         price: item.harga,
         currency: item.kode_mata_uang,
       },
+
+      returnFlight: item.id_penerbangan_pulang
+        ? {
+            airline: item.maskapai_pulang,
+            code: item.kode_penerbangan_pulang,
+            origin: item.bandara_keberangkatan_pulang,
+            destination: item.bandara_kedatangan_pulang,
+            departureDate: item.waktu_keberangkatan_pulang,
+            arrivalDate: item.waktu_kedatangan_pulang,
+            duration: item.durasi_pulang,
+            price: item.harga_pulang,
+            currency: item.kode_mata_uang_pulang,
+          }
+        : null,
+
+      totalPrice: item.total_harga,
     }))
   } catch (error) {
     console.error('History error:', error)
@@ -252,6 +354,11 @@ onMounted(loadBookings)
               <p class="mt-1 text-sm text-slate-500">
                 {{ booking.flight?.code || '-' }}
               </p>
+
+              <p v-if="booking.returnFlight" class="mt-2 text-xs font-medium text-blue-600">
+                Pulang-pergi
+              </p>
+              <p v-else class="mt-2 text-xs font-medium text-slate-500">Sekali jalan</p>
             </div>
 
             <!-- SUMMARY GRID -->
@@ -280,6 +387,14 @@ onMounted(loadBookings)
                 </p>
               </div>
 
+              <div v-if="booking.returnFlight">
+                <p class="text-xs text-slate-500">Tanggal Pulang</p>
+
+                <p class="mt-1 font-semibold text-slate-900">
+                  {{ formatDate(booking.returnFlight.departureDate) }}
+                </p>
+              </div>
+
               <div>
                 <p class="text-xs text-slate-500">Nama Penumpang</p>
 
@@ -301,7 +416,7 @@ onMounted(loadBookings)
                 <p class="text-xs text-slate-500">Total Harga</p>
 
                 <p class="mt-1 font-bold text-blue-700">
-                  {{ formatPrice(booking.flight?.totalPrice) }}
+                  {{ formatPrice(booking.totalPrice) }}
                 </p>
               </div>
             </div>
@@ -360,9 +475,9 @@ onMounted(loadBookings)
                 </div>
               </div>
 
-              <!-- FLIGHT INFO -->
+              <!-- OUTBOUND FLIGHT -->
               <div class="rounded-xl border border-slate-200 bg-white p-4">
-                <h3 class="mb-4 font-bold text-slate-900">✈️ Informasi Penerbangan</h3>
+                <h3 class="mb-4 font-bold text-slate-900">✈️ Informasi Penerbangan Pergi</h3>
 
                 <div class="mb-4">
                   <p class="text-sm font-bold text-slate-900">
@@ -386,7 +501,9 @@ onMounted(loadBookings)
                     <p class="mt-2 text-xs text-slate-500">Waktu Keberangkatan</p>
 
                     <p class="mt-1 font-medium text-slate-900">
-                      {{ formatDateTime(booking.flight?.departureDate) }}
+                      {{
+                        formatFlightDateTime(booking.flight?.departureDate, booking.flight?.origin)
+                      }}
                     </p>
                   </div>
 
@@ -400,7 +517,12 @@ onMounted(loadBookings)
                     <p class="mt-2 text-xs text-slate-500">Waktu Kedatangan</p>
 
                     <p class="mt-1 font-medium text-slate-900">
-                      {{ formatDateTime(booking.flight?.arrivalDate) }}
+                      {{
+                        formatFlightDateTime(
+                          booking.flight?.arrivalDate,
+                          booking.flight?.destination,
+                        )
+                      }}
                     </p>
                   </div>
                 </div>
@@ -409,7 +531,74 @@ onMounted(loadBookings)
                   <p class="text-xs text-slate-500">Durasi Penerbangan</p>
 
                   <p class="mt-1 font-medium text-slate-900">
-                    {{ booking.flight?.duration || '-' }}
+                    {{ formatFlightDuration(booking.flight?.duration) }}
+                  </p>
+                </div>
+              </div>
+
+              <!-- RETURN FLIGHT -->
+              <div
+                v-if="booking.returnFlight"
+                class="mt-4 rounded-xl border border-slate-200 bg-white p-4"
+              >
+                <h3 class="mb-4 font-bold text-slate-900">✈️ Informasi Penerbangan Pulang</h3>
+
+                <div class="mb-4">
+                  <p class="text-sm font-bold text-slate-900">
+                    {{ booking.returnFlight.airline || '-' }}
+                  </p>
+
+                  <p class="text-sm text-slate-500">
+                    Nomor penerbangan:
+                    {{ booking.returnFlight.code || '-' }}
+                  </p>
+                </div>
+
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <p class="text-xs text-slate-500">Bandara Keberangkatan</p>
+
+                    <p class="mt-1 font-semibold text-slate-900">
+                      {{ booking.returnFlight.origin || '-' }}
+                    </p>
+
+                    <p class="mt-2 text-xs text-slate-500">Waktu Keberangkatan</p>
+
+                    <p class="mt-1 font-medium text-slate-900">
+                      {{
+                        formatFlightDateTime(
+                          booking.returnFlight.departureDate,
+                          booking.returnFlight.origin,
+                        )
+                      }}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p class="text-xs text-slate-500">Bandara Kedatangan</p>
+
+                    <p class="mt-1 font-semibold text-slate-900">
+                      {{ booking.returnFlight.destination || '-' }}
+                    </p>
+
+                    <p class="mt-2 text-xs text-slate-500">Waktu Kedatangan</p>
+
+                    <p class="mt-1 font-medium text-slate-900">
+                      {{
+                        formatFlightDateTime(
+                          booking.returnFlight.arrivalDate,
+                          booking.returnFlight.destination,
+                        )
+                      }}
+                    </p>
+                  </div>
+                </div>
+
+                <div class="mt-4">
+                  <p class="text-xs text-slate-500">Durasi Penerbangan</p>
+
+                  <p class="mt-1 font-medium text-slate-900">
+                    {{ formatFlightDuration(booking.returnFlight.duration) }}
                   </p>
                 </div>
               </div>
@@ -457,7 +646,7 @@ onMounted(loadBookings)
                 </div>
 
                 <p class="text-lg font-bold text-blue-700">
-                  {{ formatPrice(booking.flight?.totalPrice) }}
+                  {{ formatPrice(booking.totalPrice) }}
                 </p>
               </div>
 

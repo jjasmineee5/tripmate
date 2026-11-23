@@ -17,6 +17,9 @@ const adminRoutes = require('./admin')
 const destinasiRoutes = require('./destinasi')
 const bookingRoutes = require('./bookingRoutes')
 const historyRoutes = require('./historyRoutes')
+const airportRoutes = require('./airportRoutes')
+const daftarBawaanRoutes = require('./daftarBawaanRoutes')
+const rencanaPerjalananRoutes = require('./rencanaPerjalananRoutes')
 
 app.use('/api/auth', authRoutes)
 app.use('/api/perjalanan', perjalananRoutes)
@@ -24,7 +27,9 @@ app.use('/api/admin', adminRoutes)
 app.use('/api/destinasi', destinasiRoutes)
 app.use('/api/booking', bookingRoutes)
 app.use('/api/history', historyRoutes)
-
+app.use('/api/airports', airportRoutes)
+app.use('/api/daftar-bawaan', daftarBawaanRoutes)
+app.use('/api/itinerary-db', rencanaPerjalananRoutes)
 // ========================================
 // HEALTH CHECK
 // ========================================

@@ -4,7 +4,7 @@ const { verifyToken } = require('./authMiddleware')
 
 const router = express.Router()
 
-// Memastikan hanya admin yang bisa mengelola data destinasi
+// Memastikan hanya admin yang bisa mengelola destinasi
 function verifyAdmin(req, res, next) {
   if (req.user.role !== 'admin') {
     return res.status(403).json({
@@ -16,8 +16,7 @@ function verifyAdmin(req, res, next) {
   next()
 }
 
-// GET: Menampilkan seluruh destinasi
-// Bisa diakses oleh pengguna yang sudah login
+// GET: Mengambil seluruh destinasi
 router.get('/', verifyToken, async (req, res) => {
   try {
     const [destinasi] = await db.query(`
@@ -27,9 +26,10 @@ router.get('/', verifyToken, async (req, res) => {
         negara,
         kota,
         deskripsi,
-        tautan_gambar
+        tautan_gambar,
+        rating,
+        detail
       FROM destinasi
-      ORDER BY nama ASC
     `)
 
     res.json({
@@ -49,7 +49,7 @@ router.get('/', verifyToken, async (req, res) => {
 // POST: Admin menambahkan destinasi
 router.post('/', verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const { nama, negara, kota, deskripsi, tautan_gambar } = req.body
+    const { nama, negara, kota, deskripsi, tautan_gambar, rating, detail } = req.body
 
     if (!nama?.trim() || !negara?.trim() || !kota?.trim()) {
       return res.status(400).json({
@@ -58,16 +58,31 @@ router.post('/', verifyToken, verifyAdmin, async (req, res) => {
       })
     }
 
+    const nilaiRating =
+      rating === '' || rating === null || rating === undefined ? null : Number(rating)
+
+    if (
+      nilaiRating !== null &&
+      (!Number.isFinite(nilaiRating) || nilaiRating < 0 || nilaiRating > 5)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rating harus berada antara 0 dan 5.',
+      })
+    }
+
     const [result] = await db.query(
       `INSERT INTO destinasi
-       (nama, negara, kota, deskripsi, tautan_gambar)
-       VALUES (?, ?, ?, ?, ?)`,
+       (nama, negara, kota, deskripsi, tautan_gambar, rating, detail)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         nama.trim(),
         negara.trim(),
         kota.trim(),
         deskripsi?.trim() || null,
         tautan_gambar?.trim() || null,
+        nilaiRating,
+        detail?.trim() || null,
       ],
     )
 
@@ -86,7 +101,7 @@ router.post('/', verifyToken, verifyAdmin, async (req, res) => {
   }
 })
 
-// PUT: Admin memperbarui destinasi
+// PUT: Admin mengedit destinasi
 router.put('/:id', verifyToken, verifyAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id)
@@ -98,12 +113,25 @@ router.put('/:id', verifyToken, verifyAdmin, async (req, res) => {
       })
     }
 
-    const { nama, negara, kota, deskripsi, tautan_gambar } = req.body
+    const { nama, negara, kota, deskripsi, tautan_gambar, rating, detail } = req.body
 
     if (!nama?.trim() || !negara?.trim() || !kota?.trim()) {
       return res.status(400).json({
         success: false,
         message: 'Nama, negara, dan kota wajib diisi.',
+      })
+    }
+
+    const nilaiRating =
+      rating === '' || rating === null || rating === undefined ? null : Number(rating)
+
+    if (
+      nilaiRating !== null &&
+      (!Number.isFinite(nilaiRating) || nilaiRating < 0 || nilaiRating > 5)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rating harus berada antara 0 dan 5.',
       })
     }
 
@@ -113,7 +141,9 @@ router.put('/:id', verifyToken, verifyAdmin, async (req, res) => {
            negara = ?,
            kota = ?,
            deskripsi = ?,
-           tautan_gambar = ?
+           tautan_gambar = ?,
+           rating = ?,
+           detail = ?
        WHERE id_destinasi = ?`,
       [
         nama.trim(),
@@ -121,6 +151,8 @@ router.put('/:id', verifyToken, verifyAdmin, async (req, res) => {
         kota.trim(),
         deskripsi?.trim() || null,
         tautan_gambar?.trim() || null,
+        nilaiRating,
+        detail?.trim() || null,
         id,
       ],
     )

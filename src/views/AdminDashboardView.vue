@@ -8,7 +8,7 @@ const users = ref([])
 const destinations = ref([])
 const bookings = ref([])
 
-const activeTab = ref('users')
+const activeTab = ref('overview')
 const loading = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
@@ -23,6 +23,8 @@ const destinationForm = ref({
   kota: '',
   deskripsi: '',
   tautan_gambar: '',
+  rating: '',
+  detail: '',
 })
 
 const stats = computed(() => ({
@@ -92,6 +94,8 @@ function resetDestinationForm() {
     kota: '',
     deskripsi: '',
     tautan_gambar: '',
+    rating: '',
+    detail: '',
   }
 
   editingDestinationId.value = null
@@ -115,6 +119,8 @@ function editDestination(destination) {
     kota: destination.kota || '',
     deskripsi: destination.deskripsi || '',
     tautan_gambar: destination.tautan_gambar || '',
+    rating: destination.rating ?? '',
+    detail: destination.detail || '',
   }
 
   showDestinationForm.value = true
@@ -195,46 +201,18 @@ onMounted(() => {
 <template>
   <main class="min-h-screen bg-[#dceafa] px-4 py-8 sm:px-8">
     <div class="mx-auto max-w-7xl">
-      <!-- Header -->
-      <header class="mb-8 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p class="text-sm font-semibold uppercase tracking-widest text-[#347bd0]">
-            Administrator
-          </p>
+      <!-- HEADER -->
+      <header class="mb-8">
+        <p class="text-sm font-semibold uppercase tracking-widest text-[#347bd0]">Administrator</p>
 
-          <h1 class="mt-1 text-3xl font-bold text-[#263951]">Dashboard TripMate</h1>
+        <h1 class="mt-1 text-3xl font-bold text-[#263951]">Dashboard TripMate</h1>
 
-          <p class="mt-2 text-sm text-slate-600">
-            Kelola data pengguna, destinasi, dan pemesanan tiket.
-          </p>
-        </div>
+        <p class="mt-2 text-sm text-slate-600">
+          Kelola data pengguna, destinasi, dan pemesanan tiket.
+        </p>
       </header>
 
-      <!-- Statistik -->
-      <section class="mb-8 grid gap-4 sm:grid-cols-3">
-        <article class="rounded-2xl bg-white p-6 shadow-sm">
-          <p class="text-sm text-slate-500">Total Pengguna</p>
-          <p class="mt-2 text-3xl font-bold text-[#263951]">
-            {{ stats.users }}
-          </p>
-        </article>
-
-        <article class="rounded-2xl bg-white p-6 shadow-sm">
-          <p class="text-sm text-slate-500">Total Destinasi</p>
-          <p class="mt-2 text-3xl font-bold text-[#263951]">
-            {{ stats.destinations }}
-          </p>
-        </article>
-
-        <article class="rounded-2xl bg-white p-6 shadow-sm">
-          <p class="text-sm text-slate-500">Total Pemesanan</p>
-          <p class="mt-2 text-3xl font-bold text-[#263951]">
-            {{ stats.bookings }}
-          </p>
-        </article>
-      </section>
-
-      <!-- Pesan Error -->
+      <!-- PESAN ERROR -->
       <div
         v-if="errorMessage"
         class="mb-5 rounded-xl bg-red-50 p-4 text-sm text-red-700"
@@ -243,7 +221,7 @@ onMounted(() => {
         {{ errorMessage }}
       </div>
 
-      <!-- Pesan Berhasil -->
+      <!-- PESAN BERHASIL -->
       <div
         v-if="successMessage"
         class="mb-5 rounded-xl bg-green-50 p-4 text-sm text-green-700"
@@ -252,10 +230,24 @@ onMounted(() => {
         {{ successMessage }}
       </div>
 
-      <!-- Dashboard Content -->
+      <!-- DASHBOARD CONTENT -->
       <section class="overflow-hidden rounded-2xl bg-white shadow-sm">
-        <!-- Navigasi Tab -->
+        <!-- NAVIGASI TAB -->
         <nav class="flex flex-wrap gap-2 border-b border-slate-100 p-4">
+          <!-- OVERVIEW -->
+          <button
+            @click="activeTab = 'overview'"
+            class="rounded-xl px-4 py-3 text-sm font-semibold transition"
+            :class="
+              activeTab === 'overview'
+                ? 'bg-[#347bd0] text-white'
+                : 'bg-slate-100 text-[#263951] hover:bg-blue-50'
+            "
+          >
+            Overview
+          </button>
+
+          <!-- PENGGUNA -->
           <button
             @click="activeTab = 'users'"
             class="rounded-xl px-4 py-3 text-sm font-semibold transition"
@@ -268,6 +260,7 @@ onMounted(() => {
             Data Pengguna
           </button>
 
+          <!-- DESTINASI -->
           <button
             @click="activeTab = 'destinations'"
             class="rounded-xl px-4 py-3 text-sm font-semibold transition"
@@ -280,6 +273,7 @@ onMounted(() => {
             Data Destinasi
           </button>
 
+          <!-- PEMESANAN -->
           <button
             @click="activeTab = 'bookings'"
             class="rounded-xl px-4 py-3 text-sm font-semibold transition"
@@ -292,6 +286,7 @@ onMounted(() => {
             Data Pemesanan
           </button>
 
+          <!-- REFRESH -->
           <button
             @click="loadDashboard"
             :disabled="loading"
@@ -301,10 +296,156 @@ onMounted(() => {
           </button>
         </nav>
 
+        <!-- LOADING -->
         <div v-if="loading" class="p-10 text-center text-slate-500">Memuat data dashboard...</div>
 
+        <!-- CONTENT -->
         <div v-else class="p-5 sm:p-6">
-          <!-- DATA PENGGUNA -->
+          <!-- ================= OVERVIEW ================= -->
+          <div v-if="activeTab === 'overview'" class="space-y-6">
+            <!-- WELCOME -->
+            <div class="rounded-2xl bg-[#f5f9ff] p-6">
+              <p class="text-sm font-semibold uppercase tracking-wider text-[#347bd0]">Overview</p>
+
+              <h2 class="mt-2 text-2xl font-bold text-[#263951]">
+                Selamat Datang di Dashboard Admin TripMate
+              </h2>
+
+              <p class="mt-3 leading-relaxed text-[#52657d]">
+                Kelola data pengguna, rekomendasi destinasi, dan pemesanan tiket melalui dashboard
+                administrator TripMate.
+              </p>
+            </div>
+
+            <!-- STATISTIK -->
+            <div class="grid gap-4 sm:grid-cols-3">
+              <!-- TOTAL PENGGUNA -->
+              <article class="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+                <p class="text-sm text-slate-500">Total Pengguna</p>
+
+                <p class="mt-3 text-3xl font-bold text-[#263951]">
+                  {{ stats.users }}
+                </p>
+
+                <p class="mt-2 text-sm text-slate-500">Pengguna terdaftar</p>
+              </article>
+
+              <!-- TOTAL DESTINASI -->
+              <article class="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+                <p class="text-sm text-slate-500">Total Destinasi</p>
+
+                <p class="mt-3 text-3xl font-bold text-[#263951]">
+                  {{ stats.destinations }}
+                </p>
+
+                <p class="mt-2 text-sm text-slate-500">Destinasi rekomendasi</p>
+              </article>
+
+              <!-- TOTAL PEMESANAN -->
+              <article class="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+                <p class="text-sm text-slate-500">Total Pemesanan</p>
+
+                <p class="mt-3 text-3xl font-bold text-[#263951]">
+                  {{ stats.bookings }}
+                </p>
+
+                <p class="mt-2 text-sm text-slate-500">Pemesanan tiket tercatat</p>
+              </article>
+            </div>
+
+            <!-- MENU PENGELOLAAN -->
+            <div>
+              <h3 class="mb-4 text-xl font-bold text-[#263951]">Pengelolaan Data</h3>
+
+              <div class="grid gap-4 md:grid-cols-3">
+                <!-- MENU PENGGUNA -->
+                <button
+                  @click="activeTab = 'users'"
+                  class="rounded-2xl border border-slate-100 bg-white p-5 text-left shadow-sm transition hover:border-blue-200 hover:shadow-md"
+                >
+                  <div class="flex items-center gap-3">
+                    <div
+                      class="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-xl"
+                    >
+                      👥
+                    </div>
+
+                    <div>
+                      <h4 class="font-bold text-[#263951]">Data Pengguna</h4>
+
+                      <p class="text-sm text-slate-500">{{ stats.users }} pengguna</p>
+                    </div>
+                  </div>
+
+                  <p class="mt-4 text-sm leading-relaxed text-slate-500">
+                    Lihat informasi pengguna dan status akun Premium atau Free.
+                  </p>
+
+                  <span class="mt-4 inline-block text-sm font-semibold text-[#347bd0]">
+                    Lihat Data →
+                  </span>
+                </button>
+
+                <!-- MENU DESTINASI -->
+                <button
+                  @click="activeTab = 'destinations'"
+                  class="rounded-2xl border border-slate-100 bg-white p-5 text-left shadow-sm transition hover:border-blue-200 hover:shadow-md"
+                >
+                  <div class="flex items-center gap-3">
+                    <div
+                      class="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-xl"
+                    >
+                      🌍
+                    </div>
+
+                    <div>
+                      <h4 class="font-bold text-[#263951]">Data Destinasi</h4>
+
+                      <p class="text-sm text-slate-500">{{ stats.destinations }} destinasi</p>
+                    </div>
+                  </div>
+
+                  <p class="mt-4 text-sm leading-relaxed text-slate-500">
+                    Kelola destinasi rekomendasi yang ditampilkan kepada pengguna.
+                  </p>
+
+                  <span class="mt-4 inline-block text-sm font-semibold text-[#347bd0]">
+                    Lihat Data →
+                  </span>
+                </button>
+
+                <!-- MENU PEMESANAN -->
+                <button
+                  @click="activeTab = 'bookings'"
+                  class="rounded-2xl border border-slate-100 bg-white p-5 text-left shadow-sm transition hover:border-blue-200 hover:shadow-md"
+                >
+                  <div class="flex items-center gap-3">
+                    <div
+                      class="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-xl"
+                    >
+                      ✈️
+                    </div>
+
+                    <div>
+                      <h4 class="font-bold text-[#263951]">Data Pemesanan</h4>
+
+                      <p class="text-sm text-slate-500">{{ stats.bookings }} pemesanan</p>
+                    </div>
+                  </div>
+
+                  <p class="mt-4 text-sm leading-relaxed text-slate-500">
+                    Pantau informasi pemesanan tiket pengguna TripMate.
+                  </p>
+
+                  <span class="mt-4 inline-block text-sm font-semibold text-[#347bd0]">
+                    Lihat Data →
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ================= DATA PENGGUNA ================= -->
           <div v-if="activeTab === 'users'">
             <h2 class="mb-5 text-xl font-bold text-[#263951]">Daftar Pengguna</h2>
 
@@ -361,7 +502,7 @@ onMounted(() => {
             </div>
           </div>
 
-          <!-- DATA DESTINASI -->
+          <!-- ================= DATA DESTINASI ================= -->
           <div v-if="activeTab === 'destinations'">
             <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
               <h2 class="text-xl font-bold text-[#263951]">Daftar Destinasi</h2>
@@ -374,7 +515,7 @@ onMounted(() => {
               </button>
             </div>
 
-            <!-- Form Destinasi -->
+            <!-- FORM DESTINASI -->
             <form
               v-if="showDestinationForm"
               @submit.prevent="saveDestination"
@@ -384,6 +525,7 @@ onMounted(() => {
                 {{ editingDestinationId ? 'Edit Destinasi' : 'Tambah Destinasi Baru' }}
               </h3>
 
+              <!-- NAMA -->
               <label class="text-sm font-medium text-[#263951]">
                 Nama Destinasi
 
@@ -394,6 +536,7 @@ onMounted(() => {
                 />
               </label>
 
+              <!-- NEGARA -->
               <label class="text-sm font-medium text-[#263951]">
                 Negara
 
@@ -404,6 +547,7 @@ onMounted(() => {
                 />
               </label>
 
+              <!-- KOTA -->
               <label class="text-sm font-medium text-[#263951]">
                 Kota
 
@@ -414,6 +558,7 @@ onMounted(() => {
                 />
               </label>
 
+              <!-- GAMBAR -->
               <label class="text-sm font-medium text-[#263951]">
                 Tautan Gambar
 
@@ -424,6 +569,7 @@ onMounted(() => {
                 />
               </label>
 
+              <!-- DESKRIPSI -->
               <label class="text-sm font-medium text-[#263951] sm:col-span-2">
                 Deskripsi
 
@@ -434,6 +580,34 @@ onMounted(() => {
                 ></textarea>
               </label>
 
+              <!-- RATING -->
+              <label class="text-sm font-medium text-[#263951]">
+                Rating Destinasi (0-5)
+
+                <input
+                  v-model="destinationForm.rating"
+                  type="number"
+                  min="0"
+                  max="5"
+                  step="0.1"
+                  placeholder="Contoh: 4.8"
+                  class="mt-2 w-full rounded-lg border border-slate-200 bg-white p-3 outline-none focus:border-[#347bd0]"
+                />
+              </label>
+
+              <!-- DETAIL DESTINASI -->
+              <label class="text-sm font-medium text-[#263951] sm:col-span-2">
+                Detail Destinasi
+
+                <textarea
+                  v-model="destinationForm.detail"
+                  rows="5"
+                  placeholder="Masukkan informasi lengkap tentang destinasi..."
+                  class="mt-2 w-full rounded-lg border border-slate-200 bg-white p-3 outline-none focus:border-[#347bd0]"
+                ></textarea>
+              </label>
+
+              <!-- BUTTON -->
               <div class="flex flex-wrap gap-3 sm:col-span-2">
                 <button
                   type="submit"
@@ -453,7 +627,7 @@ onMounted(() => {
               </div>
             </form>
 
-            <!-- Tabel Destinasi -->
+            <!-- TABEL DESTINASI -->
             <div class="overflow-x-auto">
               <table class="w-full text-left text-sm">
                 <thead class="bg-[#edf4fc] text-[#263951]">
@@ -501,7 +675,7 @@ onMounted(() => {
             </div>
           </div>
 
-          <!-- DATA PEMESANAN -->
+          <!-- ================= DATA PEMESANAN ================= -->
           <div v-if="activeTab === 'bookings'">
             <h2 class="mb-5 text-xl font-bold text-[#263951]">Informasi Pemesanan Tiket</h2>
 
@@ -524,10 +698,12 @@ onMounted(() => {
                     :key="booking.id_pemesanan"
                     class="border-b border-slate-100"
                   >
+                    <!-- KODE -->
                     <td class="p-3 font-semibold text-[#263951]">
                       {{ booking.kode_pemesanan || '-' }}
                     </td>
 
+                    <!-- PENGGUNA -->
                     <td class="p-3">
                       <div class="font-medium">
                         {{ booking.nama_pengguna || '-' }}
@@ -538,20 +714,24 @@ onMounted(() => {
                       </div>
                     </td>
 
+                    <!-- MASKAPAI -->
                     <td class="p-3">
                       {{ booking.maskapai || '-' }}
                     </td>
 
+                    <!-- RUTE -->
                     <td class="p-3">
                       {{ booking.bandara_keberangkatan || '-' }}
                       →
                       {{ booking.bandara_kedatangan || '-' }}
                     </td>
 
+                    <!-- STATUS -->
                     <td class="p-3">
                       {{ booking.status || '-' }}
                     </td>
 
+                    <!-- HARGA -->
                     <td class="p-3">
                       {{ formatPrice(booking.total_harga) }}
                     </td>
@@ -569,6 +749,7 @@ onMounted(() => {
         </div>
       </section>
 
+      <!-- FOOTER -->
       <p class="mt-6 text-center text-xs text-slate-500">TripMate Administrator Dashboard</p>
     </div>
   </main>

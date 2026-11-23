@@ -78,7 +78,7 @@ function formatDate(date) {
   })
 }
 
-// Autocomplete kota dan negara menggunakan Open-Meteo Geocoding
+// Autocomplete bandara menggunakan API TripMate
 const originSuggestions = ref([])
 const destinationSuggestions = ref([])
 const searchingOrigin = ref(false)
@@ -96,49 +96,34 @@ const today = (() => {
 function searchLocation(type) {
   const isOrigin = type === 'origin'
   const query = (isOrigin ? origin.value : destination.value).trim()
-
   clearTimeout(isOrigin ? originSearchTimer : destinationSearchTimer)
 
   if (isOrigin) {
     originSuggestions.value = []
-    if (query.length < 2) {
-      searchingOrigin.value = false
-      return
-    }
-    searchingOrigin.value = true
+    searchingOrigin.value = query.length >= 2
   } else {
     destinationSuggestions.value = []
-    if (query.length < 2) {
-      searchingDestination.value = false
-      return
-    }
-    searchingDestination.value = true
+    searchingDestination.value = query.length >= 2
+  }
+
+  if (query.length < 2) {
+    if (isOrigin) searchingOrigin.value = false
+    else searchingDestination.value = false
+    return
   }
 
   const timer = setTimeout(async () => {
     try {
-      const response = await fetch(
-        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=6&language=id&format=json`,
-      )
-
-      if (!response.ok) throw new Error('Gagal mencari lokasi.')
-
+      const response = await fetch(`${API_URL}/airports/search?q=${encodeURIComponent(query)}`)
+      if (!response.ok) throw new Error('Gagal mencari bandara.')
       const result = await response.json()
       const currentQuery = (isOrigin ? origin.value : destination.value).trim()
-
       if (currentQuery !== query) return
-
-      const suggestions = (result.results || []).map((item) => {
-        const parts = [item.name, item.admin1, item.country].filter(
-          (value, index, array) => value && array.indexOf(value) === index,
-        )
-
-        return { ...item, label: parts.join(', ') }
-      })
-
+      const suggestions = Array.isArray(result.data) ? result.data : []
       if (isOrigin) originSuggestions.value = suggestions
       else destinationSuggestions.value = suggestions
-    } catch {
+    } catch (error) {
+      console.error('Gagal mencari bandara:', error)
       if (isOrigin) originSuggestions.value = []
       else destinationSuggestions.value = []
     } finally {
@@ -147,21 +132,31 @@ function searchLocation(type) {
         else searchingDestination.value = false
       }
     }
-  }, 350)
+  }, 250)
 
   if (isOrigin) originSearchTimer = timer
   else destinationSearchTimer = timer
 }
 
-function selectOrigin(location) {
-  origin.value = location.label
+function airportLabel(airport) {
+  if (airport.type === 'location') {
+    return airport.label || `${airport.city}, ${airport.country}`
+  }
+
+  return [airport.city || airport.name, airport.iata ? `(${airport.iata})` : '', airport.country]
+    .filter(Boolean)
+    .join(', ')
+}
+
+function selectOrigin(airport) {
+  origin.value = airportLabel(airport)
   originSuggestions.value = []
   searchingOrigin.value = false
   clearTimeout(originSearchTimer)
 }
 
-function selectDestination(location) {
-  destination.value = location.label
+function selectDestination(airport) {
+  destination.value = airportLabel(airport)
   destinationSuggestions.value = []
   searchingDestination.value = false
   clearTimeout(destinationSearchTimer)
@@ -400,19 +395,27 @@ onUnmounted(() => {
               class="absolute left-0 right-0 top-full z-50 mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
             >
               <button
-                v-for="(location, index) in originSuggestions"
-                :key="`${location.id}-${index}`"
+                v-for="(airport, index) in originSuggestions"
+                :key="`${airport.iata || airport.label}-${index}`"
                 type="button"
                 class="flex w-full flex-col rounded-lg px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700"
-                @mousedown.prevent="selectOrigin(location)"
+                @mousedown.prevent="selectOrigin(airport)"
               >
-                <span class="font-medium">{{ location.name }}</span>
+                <span class="font-medium">
+                  {{ airport.label || airport.city }}
+                  {{ airport.iata ? `(${airport.iata})` : '' }}
+                </span>
+
                 <span class="text-xs text-slate-500">
-                  {{ location.admin1 ? location.admin1 + ', ' : '' }}{{ location.country }}
+                  {{
+                    airport.type === 'location'
+                      ? 'Lokasi'
+                      : airport.name + (airport.country ? ', ' + airport.country : '')
+                  }}
                 </span>
               </button>
             </div>
-            <p v-if="searchingOrigin" class="mt-1 text-xs text-slate-500">Mencari lokasi...</p>
+            <p v-if="searchingOrigin" class="mt-1 text-xs text-slate-500">Mencari bandara...</p>
           </div>
 
           <!-- Kota Tujuan -->
@@ -441,19 +444,24 @@ onUnmounted(() => {
               class="absolute left-0 right-0 top-full z-50 mt-1 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
             >
               <button
-                v-for="(location, index) in destinationSuggestions"
-                :key="`${location.id}-${index}`"
+                v-for="(airport, index) in destinationSuggestions"
+                :key="`${airport.id}-${index}`"
                 type="button"
                 class="flex w-full flex-col rounded-lg px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700"
-                @mousedown.prevent="selectDestination(location)"
+                @mousedown.prevent="selectDestination(airport)"
               >
-                <span class="font-medium">{{ location.name }}</span>
+                <span class="font-medium">
+                  {{ airport.city || airport.municipality || airport.name }}
+                  {{ airport.iata_code ? `(${airport.iata_code})` : '' }}
+                </span>
                 <span class="text-xs text-slate-500">
-                  {{ location.admin1 ? location.admin1 + ', ' : '' }}{{ location.country }}
+                  {{ airport.name }} {{ airport.country ? ', ' + airport.country : '' }}
                 </span>
               </button>
             </div>
-            <p v-if="searchingDestination" class="mt-1 text-xs text-slate-500">Mencari lokasi...</p>
+            <p v-if="searchingDestination" class="mt-1 text-xs text-slate-500">
+              Mencari bandara...
+            </p>
           </div>
 
           <!-- Tanggal Keberangkatan -->
@@ -498,8 +506,7 @@ onUnmounted(() => {
         </form>
 
         <p class="mt-3 text-xs text-slate-500">
-          Ketik minimal 2 karakter untuk melihat saran kota/negara. Lokasi tetap bisa diketik
-          manual.
+          Ketik minimal 2 karakter untuk melihat saran bandara. Lokasi tetap bisa diketik manual.
         </p>
       </div>
     </section>

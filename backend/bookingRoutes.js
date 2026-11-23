@@ -10,7 +10,7 @@ function convertDurationToMinutes(duration) {
 
   if (/^\d+$/.test(text)) return Number(text)
 
-  const hours = text.match(/(\d+)\s*(?:jam|hours?|h)\b/)
+  const hours = text.match(/(\d+)\s*(?:jam|j|hours?|h)\b/)
   const minutes = text.match(/(\d+)\s*(?:menit|minutes?|m)\b/)
 
   if (hours || minutes) {

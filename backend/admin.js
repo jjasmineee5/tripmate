@@ -74,11 +74,11 @@ router.get('/bookings', verifyToken, verifyAdmin, async (req, res) => {
 
       FROM pemesanan pm
 
-      JOIN perjalanan pj
-        ON pm.id_perjalanan = pj.id_perjalanan
-
       JOIN pengguna pg
-        ON pj.id_pengguna = pg.id_pengguna
+        ON pm.id_pengguna = pg.id_pengguna
+
+      LEFT JOIN perjalanan pj
+        ON pm.id_perjalanan = pj.id_perjalanan
 
       LEFT JOIN penerbangan pn
         ON pm.id_penerbangan = pn.id_penerbangan

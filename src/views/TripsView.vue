@@ -11,6 +11,8 @@ const showForm = ref(false)
 const message = ref('')
 const editingId = ref(null)
 const trips = ref([])
+const tripsWithItinerary = ref([])
+const tripsWithPackingList = ref([])
 const loading = ref(false)
 const saving = ref(false)
 
@@ -62,15 +64,32 @@ async function apiRequest(endpoint, options = {}) {
 // Mengambil perjalanan dari database
 async function loadTrips() {
   loading.value = true
+  message.value = ''
 
   try {
     const result = await apiRequest('/perjalanan')
     trips.value = result.data || []
   } catch (error) {
     message.value = `Gagal memuat perjalanan: ${error.message}`
-  } finally {
     loading.value = false
+    return
   }
+
+  try {
+    const itineraryStatus = await apiRequest('/itinerary-db/status/list')
+    tripsWithItinerary.value = itineraryStatus.data || []
+  } catch (error) {
+    console.error('Gagal mengecek status itinerary:', error.message)
+  }
+
+  try {
+    const packingListStatus = await apiRequest('/daftar-bawaan/status/list')
+    tripsWithPackingList.value = packingListStatus.data || []
+  } catch (error) {
+    console.error('Gagal mengecek status daftar perlengkapan:', error.message)
+  }
+
+  loading.value = false
 }
 
 // Mencari saran kota dan negara
@@ -285,6 +304,32 @@ function openItinerary(trip) {
     path: '/itinerary',
     query: {
       tripId: String(trip.id_perjalanan),
+    },
+  })
+}
+
+// Membuka Daftar Perlengkapan langsung dari perjalanan yang dipilih
+function openPackingList(trip) {
+  const startDate = String(trip.tanggal_mulai || '').slice(0, 10)
+  const endDate = String(trip.tanggal_selesai || '').slice(0, 10)
+  let duration = 3
+
+  if (startDate && endDate) {
+    const start = new Date(`${startDate}T12:00:00`)
+    const end = new Date(`${endDate}T12:00:00`)
+    const calculated = Math.round((end - start) / 86400000) + 1
+    if (Number.isInteger(calculated) && calculated > 0 && calculated <= 90) {
+      duration = calculated
+    }
+  }
+
+  router.push({
+    path: '/packing-list',
+    query: {
+      tripId: String(trip.id_perjalanan),
+      destination: trip.tujuan_perjalanan || '',
+      duration: String(duration),
+      tripType: 'liburan',
     },
   })
 }
@@ -590,7 +635,23 @@ onUnmounted(() => {
                 class="rounded-lg bg-[#347bd0] px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
                 @click="openItinerary(trip)"
               >
-                Buat Itinerary AI
+                {{
+                  tripsWithItinerary.some((id) => String(id) === String(trip.id_perjalanan))
+                    ? 'Lihat Rencana Perjalanan'
+                    : 'Buat Rencana Perjalanan dengan AI'
+                }}
+              </button>
+
+              <button
+                type="button"
+                class="rounded-lg bg-[#20a39e] px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-700"
+                @click="openPackingList(trip)"
+              >
+                {{
+                  tripsWithPackingList.some((id) => String(id) === String(trip.id_perjalanan))
+                    ? 'Lihat Daftar Perlengkapan'
+                    : 'Buat Daftar Perlengkapan'
+                }}
               </button>
 
               <button

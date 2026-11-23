@@ -1,9 +1,71 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 const router = useRouter()
 const route = useRoute()
+
+// Mengambil data perjalanan dan detail itinerary dari database
+async function loadTripFromDatabase() {
+  const tripId = route.query.tripId
+  if (!tripId) return
+
+  const token = localStorage.getItem('tripmate-token')
+  if (!token) {
+    errorMessage.value = 'Sesi login tidak ditemukan. Silakan login kembali.'
+    router.push('/login')
+    return
+  }
+
+  try {
+    // Mengambil data perjalanan
+    const response = await fetch('http://localhost:3000/api/perjalanan', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    const result = await response.json()
+
+    if (!response.ok || result.success === false) {
+      throw new Error(result.message || 'Gagal mengambil data perjalanan.')
+    }
+
+    const trips = result.data || []
+    const trip = trips.find((item) => String(item.id_perjalanan) === String(tripId))
+
+    if (!trip) {
+      throw new Error('Perjalanan yang dipilih tidak ditemukan.')
+    }
+
+    // Mengisi detail perjalanan
+    destination.value = trip.tujuan_perjalanan || ''
+    startDate.value = trip.tanggal_mulai ? String(trip.tanggal_mulai).slice(0, 10) : ''
+    endDate.value = trip.tanggal_selesai ? String(trip.tanggal_selesai).slice(0, 10) : ''
+
+    // Mengambil detail itinerary dari database
+    const itineraryResponse = await fetch(`http://localhost:3000/api/itinerary-db/${tripId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    const itineraryResult = await itineraryResponse.json()
+
+    if (!itineraryResponse.ok || itineraryResult.success === false) {
+      throw new Error(itineraryResult.message || 'Gagal memuat detail itinerary.')
+    }
+
+    // Memasukkan itinerary ke tampilan
+    if (itineraryResult.data && itineraryResult.data.days) {
+      itineraryDays.value = normalizeDays(itineraryResult.data.days)
+    } else {
+      itineraryDays.value = []
+    }
+
+    selectedDay.value = 0
+    errorMessage.value = ''
+    successMessage.value = ''
+  } catch (error) {
+    errorMessage.value = error.message || 'Gagal memuat data perjalanan.'
+  }
+}
 
 const itineraryStorageKey = 'tripmate-itinerary'
 const flightStorageKey = 'tripmate-selected-flight'
@@ -17,6 +79,8 @@ const budget = ref('medium')
 const selectedFlight = ref(null)
 const itineraryDays = ref([])
 const selectedDay = ref(0)
+
+const dbTripId = ref(null)
 
 const isGenerating = ref(false)
 const isSaving = ref(false)
@@ -37,7 +101,7 @@ function readJson(key, fallback = null) {
   }
 }
 
-function saveItinerary() {
+async function saveItinerary() {
   if (!destination.value.trim()) {
     errorMessage.value = 'Destinasi perjalanan belum diisi.'
     successMessage.value = ''
@@ -61,8 +125,10 @@ function saveItinerary() {
       updatedAt: new Date().toISOString(),
     }
 
+    // Simpan ke localStorage
     localStorage.setItem(itineraryStorageKey, JSON.stringify(savedData))
 
+    // Verifikasi localStorage
     const verification = localStorage.getItem(itineraryStorageKey)
 
     if (!verification) {
@@ -79,13 +145,40 @@ function saveItinerary() {
       throw new Error('Verifikasi penyimpanan rencana perjalanan gagal.')
     }
 
+    // Simpan detail itinerary ke database jika trip berasal dari database
+    const tripId = route.query.tripId
+    const token = localStorage.getItem('tripmate-token')
+
+    if (tripId && token) {
+      const response = await fetch('http://localhost:3000/api/itinerary-db/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          dbTripId: Number(tripId),
+          destination: destination.value.trim(),
+          startDate: startDate.value,
+          endDate: endDate.value,
+          days: itineraryDays.value,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || result.success === false) {
+        throw new Error(result.message || 'Gagal menyimpan itinerary ke database.')
+      }
+    }
+
     successMessage.value = 'Rencana perjalanan berhasil disimpan!'
     errorMessage.value = ''
 
     return true
   } catch (error) {
     successMessage.value = ''
-    errorMessage.value = error.message || 'Rencana perjalanan gagal disimpan di browser.'
+    errorMessage.value = error.message || 'Rencana perjalanan gagal disimpan.'
 
     return false
   }
@@ -96,18 +189,38 @@ function loadFlight() {
   selectedFlight.value = flight && flight.selectedAt ? flight : null
 }
 
-function loadSavedItinerary() {
-  const saved = readJson(itineraryStorageKey)
+function loadSavedItinerary(tripId = null) {
+  let saved
 
-  if (!saved) return
+  // Jika membuka perjalanan tertentu, cari storage khusus ID tersebut.
+  if (tripId) {
+    saved = readJson(`tripmate-itinerary-${tripId}`)
+
+    // Jika belum ada storage khusus, coba data lama.
+    if (!saved) {
+      const legacy = readJson(itineraryStorageKey)
+
+      // Data lama hanya digunakan jika ID-nya cocok.
+      if (legacy && String(legacy.dbTripId) === String(tripId)) {
+        saved = legacy
+      }
+    }
+  } else {
+    saved = readJson(itineraryStorageKey)
+  }
+
+  if (!saved) return false
 
   destination.value = saved.destination || ''
   startDate.value = saved.startDate || ''
   endDate.value = saved.endDate || ''
   preferences.value = saved.preferences || 'Wisata, kuliner, dan tempat populer'
   budget.value = saved.budget || 'medium'
+  dbTripId.value = saved.dbTripId || tripId || null
   itineraryDays.value = normalizeDays(saved.days)
   selectedDay.value = 0
+
+  return true
 }
 
 function applyBookingContext() {
@@ -153,7 +266,6 @@ function applyBookingContext() {
   successMessage.value = ''
 }
 
-loadFlight()
 loadSavedItinerary()
 applyBookingContext()
 
@@ -354,9 +466,9 @@ async function generateItinerary() {
     selectedDay.value = 0
     isEditing.value = false
 
-    saveItinerary()
+    const saved = await saveItinerary()
 
-    if (!errorMessage.value) {
+    if (saved) {
       successMessage.value = 'Rencana perjalanan berhasil dibuat dan disimpan!'
     }
   } catch (error) {
@@ -369,14 +481,14 @@ async function generateItinerary() {
   }
 }
 
-function toggleActivity(activity) {
+async function toggleActivity(activity) {
   activity.completed = !activity.completed
   errorMessage.value = ''
   successMessage.value = ''
-  saveItinerary()
+  await saveItinerary()
 }
 
-function addActivity() {
+async function addActivity() {
   if (!activeDay.value) return
 
   if (!newActivityName.value.trim()) {
@@ -416,20 +528,20 @@ function addActivity() {
   errorMessage.value = ''
   successMessage.value = ''
 
-  saveItinerary()
+  await saveItinerary()
 }
 
-function removeActivity(index) {
+async function removeActivity(index) {
   if (!activeDay.value) return
 
   activeDay.value.activities.splice(index, 1)
   errorMessage.value = ''
   successMessage.value = ''
 
-  saveItinerary()
+  await saveItinerary()
 }
 
-function saveChanges() {
+async function saveChanges() {
   if (isSaving.value) return
 
   isSaving.value = true
@@ -437,7 +549,7 @@ function saveChanges() {
   successMessage.value = ''
 
   try {
-    const saved = saveItinerary()
+    const saved = await saveItinerary()
 
     if (saved) {
       isEditing.value = false
@@ -453,6 +565,8 @@ function startNewItinerary() {
   endDate.value = ''
   preferences.value = 'Wisata, kuliner, dan tempat populer'
   budget.value = 'medium'
+  selectedFlight.value = null
+  dbTripId.value = null
   itineraryDays.value = []
   selectedDay.value = 0
   errorMessage.value = ''
@@ -461,6 +575,7 @@ function startNewItinerary() {
 
   try {
     localStorage.removeItem(itineraryStorageKey)
+    localStorage.removeItem(flightStorageKey)
   } catch {
     errorMessage.value =
       'Rencana perjalanan baru dibuat, tetapi data lama gagal dihapus dari browser.'
@@ -470,6 +585,23 @@ function startNewItinerary() {
 function goToFlights() {
   router.push('/flights')
 }
+
+async function goToPackingList() {
+  if (!itineraryDays.value.length) {
+    errorMessage.value = 'Buat rencana perjalanan terlebih dahulu.'
+    return
+  }
+
+  const saved = await saveItinerary()
+
+  if (saved) {
+    router.push('/packing-list')
+  }
+}
+
+onMounted(() => {
+  loadTripFromDatabase()
+})
 
 watch(
   () => route.query.fromBooking,
@@ -910,6 +1042,14 @@ watch(
             >
               {{ errorMessage }}
             </div>
+
+            <button
+              type="button"
+              class="mt-3 w-full rounded-xl bg-[#347bd0] px-4 py-3 font-semibold text-white transition hover:bg-blue-700"
+              @click="goToPackingList"
+            >
+              ✨ Buat Daftar Perlengkapan
+            </button>
 
             <button
               type="button"

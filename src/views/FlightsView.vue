@@ -11,6 +11,68 @@ const departureDate = ref(String(route.query.departureDate || ''))
 const returnDate = ref(String(route.query.returnDate || ''))
 const passengers = ref(Math.max(1, Number(route.query.passengers) || 1))
 
+// Autocomplete bandara dari backend TripMate
+const originSuggestions = ref([])
+const destinationSuggestions = ref([])
+const originOpen = ref(false)
+const destinationOpen = ref(false)
+let originTimer = null
+let destinationTimer = null
+
+async function fetchAirportSuggestions(query, target) {
+  if (!query || query.trim().length < 2) {
+    target.value = []
+    return
+  }
+  try {
+    const response = await fetch(
+      `http://localhost:3000/api/airports/search?q=${encodeURIComponent(query.trim())}`,
+    )
+    const result = await response.json()
+    target.value = result?.data || []
+  } catch (error) {
+    console.error('Gagal mengambil saran bandara:', error)
+    target.value = []
+  }
+}
+
+function onOriginInput() {
+  originOpen.value = true
+  clearTimeout(originTimer)
+  originTimer = setTimeout(() => fetchAirportSuggestions(origin.value, originSuggestions), 250)
+}
+
+function onDestinationInput() {
+  destinationOpen.value = true
+  clearTimeout(destinationTimer)
+  destinationTimer = setTimeout(
+    () => fetchAirportSuggestions(destination.value, destinationSuggestions),
+    250,
+  )
+}
+
+function selectOrigin(airport) {
+  origin.value = airportLabel(airport)
+  originSuggestions.value = []
+  originOpen.value = false
+}
+
+function selectDestination(airport) {
+  destination.value = airportLabel(airport)
+  destinationSuggestions.value = []
+  destinationOpen.value = false
+}
+
+function airportLabel(airport) {
+  if (airport.type === 'location') {
+    return airport.label || `${airport.city}, ${airport.country}`
+  }
+
+  return [airport.city || airport.name, airport.iata ? `(${airport.iata})` : '', airport.country]
+    .filter(Boolean)
+    .join(', ')
+}
+
 const today = (() => {
   const date = new Date()
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
@@ -287,29 +349,85 @@ function changeOutbound() {
           class="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
           @submit.prevent="searchFlights"
         >
-          <label class="text-sm font-medium text-slate-700">
-            Kota Asal
-
+          <div class="relative text-sm font-medium text-slate-700">
+            <label for="origin-input">Kota Asal</label>
             <input
+              id="origin-input"
               v-model.trim="origin"
+              @input="onOriginInput"
+              @focus="onOriginInput"
+              @blur="originOpen = false"
               type="text"
               required
+              autocomplete="off"
               placeholder="Masukkan kota asal"
               class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3"
             />
-          </label>
+            <ul
+              v-if="originOpen && originSuggestions.length"
+              class="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
+            >
+              <li
+                v-for="(airport, index) in originSuggestions"
+                :key="`${airport.iata || airport.label}-${index}`"
+                class="cursor-pointer p-3 hover:bg-blue-50"
+                @mousedown.prevent="selectOrigin(airport)"
+              >
+                <div class="font-semibold">
+                  {{ airport.label || airport.city || airport.name }}
+                  {{ airport.iata ? `(${airport.iata})` : '' }}
+                </div>
 
-          <label class="text-sm font-medium text-slate-700">
-            Kota Tujuan
+                <div class="text-xs font-normal text-slate-500">
+                  {{
+                    airport.type === 'location'
+                      ? 'Lokasi'
+                      : airport.name + (airport.country ? ' · ' + airport.country : '')
+                  }}
+                </div>
+              </li>
+            </ul>
+          </div>
 
+          <div class="relative text-sm font-medium text-slate-700">
+            <label for="destination-input">Kota Tujuan</label>
             <input
+              id="destination-input"
               v-model.trim="destination"
+              @input="onDestinationInput"
+              @focus="onDestinationInput"
+              @blur="destinationOpen = false"
               type="text"
               required
+              autocomplete="off"
               placeholder="Masukkan kota tujuan"
               class="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3"
             />
-          </label>
+            <ul
+              v-if="destinationOpen && destinationSuggestions.length"
+              class="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
+            >
+              <li
+                v-for="(airport, index) in destinationSuggestions"
+                :key="`${airport.iata || airport.label}-${index}`"
+                class="cursor-pointer p-3 hover:bg-blue-50"
+                @mousedown.prevent="selectDestination(airport)"
+              >
+                <div class="font-semibold">
+                  {{ airport.label || airport.city || airport.name }}
+                  {{ airport.iata ? `(${airport.iata})` : '' }}
+                </div>
+
+                <div class="text-xs font-normal text-slate-500">
+                  {{
+                    airport.type === 'location'
+                      ? 'Lokasi'
+                      : airport.name + (airport.country ? ' · ' + airport.country : '')
+                  }}
+                </div>
+              </li>
+            </ul>
+          </div>
 
           <label class="text-sm font-medium text-slate-700">
             Tanggal Berangkat

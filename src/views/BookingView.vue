@@ -244,42 +244,117 @@ function backToDetails() {
       <section v-else class="rounded-3xl bg-[#f5f9ff] p-6 shadow-sm sm:p-8">
         <h2 class="text-xl font-bold text-[#263951]">Ringkasan Penerbangan</h2>
 
+        <!-- Penerbangan pergi -->
         <div class="mt-5 rounded-2xl border border-slate-200 bg-white p-5">
           <div class="flex flex-wrap justify-between gap-3">
             <div>
-              <p class="font-bold text-[#263951]">{{ flight.airline }}</p>
-              <p class="mt-1 text-sm text-slate-500">{{ flight.code }}</p>
+              <p class="text-xs font-bold uppercase tracking-wider text-blue-700">
+                Penerbangan pergi
+              </p>
+              <p class="mt-2 font-bold text-[#263951]">
+                {{ flight.outboundFlight?.airline || flight.airline }}
+              </p>
+              <p class="mt-1 text-sm text-slate-500">
+                {{ flight.outboundFlight?.code || flight.code }}
+              </p>
             </div>
-
             <p class="text-sm font-semibold text-[#347bd0]">
-              {{ flight.departureDate }}
+              {{ flight.outboundFlight?.departureDate || flight.departureDate }}
             </p>
           </div>
 
           <div class="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
             <div>
               <p class="text-xl font-bold text-[#263951]">
-                {{ flight.departure }}
+                {{ flight.outboundFlight?.departure || flight.departure }}
               </p>
-              <p class="text-sm text-slate-500">{{ flight.origin }}</p>
+              <p class="text-sm text-slate-500">
+                {{ flight.outboundFlight?.origin || flight.origin }}
+              </p>
             </div>
 
             <span class="text-xl text-[#347bd0]">→</span>
 
             <div class="text-right">
               <p class="text-xl font-bold text-[#263951]">
-                {{ flight.arrival }}
+                {{ flight.outboundFlight?.arrival || flight.arrival }}
               </p>
-              <p class="text-sm text-slate-500">{{ flight.destination }}</p>
+              <p class="text-sm text-slate-500">
+                {{ flight.outboundFlight?.destination || flight.destination }}
+              </p>
             </div>
           </div>
 
           <div class="mt-5 border-t border-slate-200 pt-4">
             <p class="text-sm text-slate-500">{{ flight.passengers }} penumpang</p>
-
-            <p class="mt-1 text-xl font-bold text-[#347bd0]">
-              {{ formattedPrice }}
+            <p class="mt-1 font-semibold text-[#347bd0]">
+              Harga pergi:
+              {{
+                Number(
+                  flight.outboundPrice ??
+                    flight.outboundFlight?.totalPrice ??
+                    flight.totalPrice ??
+                    0,
+                ).toLocaleString('id-ID', {
+                  style: 'currency',
+                  currency: 'IDR',
+                  maximumFractionDigits: 0,
+                })
+              }}
             </p>
+          </div>
+        </div>
+
+        <!-- Penerbangan pulang (hanya tampil jika tiket pulang-pergi dipilih) -->
+        <div
+          v-if="flight.returnFlight"
+          class="mt-5 rounded-2xl border border-slate-200 bg-white p-5"
+        >
+          <div class="flex flex-wrap justify-between gap-3">
+            <div>
+              <p class="text-xs font-bold uppercase tracking-wider text-emerald-700">
+                Penerbangan pulang
+              </p>
+              <p class="mt-2 font-bold text-[#263951]">{{ flight.returnFlight.airline }}</p>
+              <p class="mt-1 text-sm text-slate-500">{{ flight.returnFlight.code }}</p>
+            </div>
+            <p class="text-sm font-semibold text-emerald-700">
+              {{ flight.returnFlight.departureDate || flight.returnDate }}
+            </p>
+          </div>
+
+          <div class="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <div>
+              <p class="text-xl font-bold text-[#263951]">{{ flight.returnFlight.departure }}</p>
+              <p class="text-sm text-slate-500">{{ flight.returnFlight.origin }}</p>
+            </div>
+
+            <span class="text-xl text-emerald-700">→</span>
+
+            <div class="text-right">
+              <p class="text-xl font-bold text-[#263951]">{{ flight.returnFlight.arrival }}</p>
+              <p class="text-sm text-slate-500">{{ flight.returnFlight.destination }}</p>
+            </div>
+          </div>
+
+          <div class="mt-5 border-t border-slate-200 pt-4">
+            <p class="font-semibold text-emerald-700">
+              Harga pulang:
+              {{
+                Number(flight.returnPrice ?? flight.returnFlight?.totalPrice ?? 0).toLocaleString(
+                  'id-ID',
+                  { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 },
+                )
+              }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Total harga -->
+        <div class="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-5">
+          <div class="flex items-center justify-between gap-4">
+            <span class="font-semibold text-[#263951]">Total harga simulasi</span>
+            <span class="text-xl font-bold text-[#347bd0]">{{ formattedPrice }}</span>
           </div>
         </div>
 
