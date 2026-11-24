@@ -15,6 +15,7 @@ const navLinks = [
   { label: 'Rencana Perjalanan', path: '/itinerary' },
   { label: 'Daftar Perlengkapan', path: '/packing-list' },
   { label: 'Destinasi', path: '/destinations' },
+  { label: 'Premium', path: '/premium' },
 ]
 
 const isLoggedIn = computed(() => currentUser.value !== null)

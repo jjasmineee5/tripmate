@@ -8,6 +8,7 @@ import ItineraryView from '../views/ItineraryView.vue'
 import FlightsView from '../views/FlightsView.vue'
 import DestinationsView from '../views/DestinationsView.vue'
 import ProfileView from '../views/ProfileView.vue'
+import PremiumView from '../views/PremiumView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -93,6 +94,12 @@ const router = createRouter({
       path: '/profile',
       name: 'profile',
       component: ProfileView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/premium',
+      name: 'premium',
+      component: PremiumView,
       meta: { requiresAuth: true },
     },
     {
