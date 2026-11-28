@@ -5,6 +5,19 @@ import { useRoute, useRouter } from 'vue-router'
 const router = useRouter()
 const route = useRoute()
 
+const currentUser = JSON.parse(localStorage.getItem('tripmate-current-user') || '{}')
+const isPremium = computed(() => {
+  return (
+    currentUser?.status_premium == 1 ||
+    currentUser?.is_premium === true ||
+    currentUser?.isPremium === true
+  )
+})
+
+function goToPremium() {
+  router.push('/premium')
+}
+
 // Mengambil data perjalanan dan detail itinerary dari database
 async function loadTripFromDatabase() {
   const tripId = route.query.tripId
@@ -67,8 +80,14 @@ async function loadTripFromDatabase() {
   }
 }
 
-const itineraryStorageKey = 'tripmate-itinerary'
 const flightStorageKey = 'tripmate-selected-flight'
+
+// Storage itinerary dipisahkan berdasarkan akun yang sedang login.
+function getItineraryStorageKey() {
+  const user = readJson('tripmate-current-user', {})
+  const userId = user?.id ?? user?.id_pengguna
+  return userId != null ? `tripmate-itinerary-user-${userId}` : null
+}
 
 const destination = ref('')
 const startDate = ref('')
@@ -87,6 +106,9 @@ const isSaving = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 const isEditing = ref(false)
+
+const budgetAdjustmentAmount = ref('')
+const isAdjustingBudget = ref(false)
 
 const newActivityName = ref('')
 const newActivityTime = ref('')
@@ -125,7 +147,11 @@ async function saveItinerary() {
       updatedAt: new Date().toISOString(),
     }
 
-    // Simpan ke localStorage
+    // Simpan ke localStorage khusus akun yang sedang login
+    const itineraryStorageKey = getItineraryStorageKey()
+    if (!itineraryStorageKey) {
+      throw new Error('ID akun tidak ditemukan. Silakan login kembali.')
+    }
     localStorage.setItem(itineraryStorageKey, JSON.stringify(savedData))
 
     // Verifikasi localStorage
@@ -196,17 +222,11 @@ function loadSavedItinerary(tripId = null) {
   if (tripId) {
     saved = readJson(`tripmate-itinerary-${tripId}`)
 
-    // Jika belum ada storage khusus, coba data lama.
-    if (!saved) {
-      const legacy = readJson(itineraryStorageKey)
-
-      // Data lama hanya digunakan jika ID-nya cocok.
-      if (legacy && String(legacy.dbTripId) === String(tripId)) {
-        saved = legacy
-      }
-    }
+    // Jangan fallback ke storage global lama karena bisa milik akun lain.
   } else {
-    saved = readJson(itineraryStorageKey)
+    // Hanya membaca itinerary dari storage akun saat ini, bukan storage global lama.
+    const itineraryStorageKey = getItineraryStorageKey()
+    saved = itineraryStorageKey ? readJson(itineraryStorageKey) : null
   }
 
   if (!saved) return false
@@ -559,6 +579,78 @@ async function saveChanges() {
   }
 }
 
+async function adjustItineraryBudget() {
+  errorMessage.value = ''
+  successMessage.value = ''
+
+  const targetBudget = Number(budgetAdjustmentAmount.value)
+  if (!Number.isFinite(targetBudget) || targetBudget <= 0) {
+    errorMessage.value = 'Masukkan target budget yang valid dan lebih dari 0.'
+    return
+  }
+
+  if (!itineraryDays.value.length) {
+    errorMessage.value = 'Buat itinerary terlebih dahulu sebelum menyesuaikan budget.'
+    return
+  }
+
+  const token = localStorage.getItem('tripmate-token')
+  if (!token) {
+    errorMessage.value = 'Sesi login tidak ditemukan. Silakan login kembali.'
+    router.push('/login')
+    return
+  }
+
+  isAdjustingBudget.value = true
+  try {
+    const response = await fetch('http://localhost:3000/api/premium/itinerary/adjust-budget', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        destination: destination.value.trim(),
+        targetBudget,
+        itinerary: { days: itineraryDays.value },
+      }),
+    })
+
+    const result = await response.json()
+
+    if (response.status === 401) {
+      localStorage.removeItem('tripmate-token')
+      localStorage.removeItem('tripmate-current-user')
+      router.push('/login')
+      throw new Error('Sesi login berakhir. Silakan login kembali.')
+    }
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.message || 'Gagal menyesuaikan itinerary dengan budget.')
+    }
+
+    const adjustedDays = normalizeDays(result.itinerary?.days)
+    if (!adjustedDays.length) {
+      throw new Error('AI tidak mengembalikan itinerary yang valid.')
+    }
+
+    itineraryDays.value = adjustedDays
+    selectedDay.value = 0
+    isEditing.value = false
+
+    const saved = await saveItinerary()
+    if (saved) {
+      successMessage.value = 'Itinerary berhasil disesuaikan dengan target budget dan disimpan!'
+      errorMessage.value = ''
+    }
+  } catch (error) {
+    errorMessage.value = error.message || 'Gagal menyesuaikan budget itinerary.'
+    successMessage.value = ''
+  } finally {
+    isAdjustingBudget.value = false
+  }
+}
+
 function startNewItinerary() {
   destination.value = ''
   startDate.value = ''
@@ -574,7 +666,8 @@ function startNewItinerary() {
   isEditing.value = false
 
   try {
-    localStorage.removeItem(itineraryStorageKey)
+    const itineraryStorageKey = getItineraryStorageKey()
+    if (itineraryStorageKey) localStorage.removeItem(itineraryStorageKey)
     localStorage.removeItem(flightStorageKey)
   } catch {
     errorMessage.value =
@@ -862,6 +955,49 @@ watch(
                 <span class="block text-xs opacity-80">Hari</span>
                 <span class="text-lg font-bold">{{ index + 1 }}</span>
               </button>
+            </div>
+
+            <div class="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <h3 class="font-bold text-[#263951]">✨ Penyesuaian Budget Premium</h3>
+              <p class="mt-1 text-sm leading-5 text-slate-600">
+                Atur target anggaran baru untuk menyesuaikan aktivitas itinerary yang sudah dibuat.
+              </p>
+
+              <template v-if="isPremium">
+                <div class="mt-3 flex flex-col gap-3 sm:flex-row">
+                  <input
+                    v-model="budgetAdjustmentAmount"
+                    type="number"
+                    min="1"
+                    placeholder="Target budget (Rp)"
+                    class="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none focus:border-[#347bd0]"
+                  />
+                  <button
+                    type="button"
+                    :disabled="isAdjustingBudget || isSaving || !itineraryDays.length"
+                    class="rounded-lg bg-[#347bd0] px-4 py-2 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    @click="adjustItineraryBudget"
+                  >
+                    {{ isAdjustingBudget ? 'Menyesuaikan...' : 'Sesuaikan Budget ✨' }}
+                  </button>
+                </div>
+                <p class="mt-2 text-xs text-slate-500">
+                  Fitur ini hanya dapat digunakan oleh akun Premium.
+                </p>
+              </template>
+
+              <template v-else>
+                <button
+                  type="button"
+                  class="mt-3 w-full rounded-lg bg-[#347bd0] px-4 py-2 font-semibold text-white transition hover:bg-blue-700"
+                  @click="goToPremium"
+                >
+                  Upgrade Premium ✨
+                </button>
+                <p class="mt-2 text-xs text-slate-500">
+                  Upgrade ke Premium untuk menyesuaikan itinerary dengan target budget.
+                </p>
+              </template>
             </div>
 
             <div v-if="activeDay" class="mt-5">

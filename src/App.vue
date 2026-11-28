@@ -15,13 +15,21 @@ const navLinks = [
   { label: 'Rencana Perjalanan', path: '/itinerary' },
   { label: 'Daftar Perlengkapan', path: '/packing-list' },
   { label: 'Destinasi', path: '/destinations' },
-  { label: 'Premium', path: '/premium' },
 ]
 
 const isLoggedIn = computed(() => currentUser.value !== null)
 
 // Navbar mengikuti role akun yang sedang login
 const isAdminArea = computed(() => currentUser.value?.role === 'admin')
+
+// Memeriksa status Premium pengguna
+const isPremium = computed(() => {
+  return (
+    currentUser.value?.status_premium == 1 ||
+    currentUser.value?.is_premium === true ||
+    currentUser.value?.isPremium === true
+  )
+})
 
 function loadCurrentUser() {
   try {
@@ -75,7 +83,7 @@ onUnmounted(() => {
       <nav
         class="mx-auto flex min-h-[80px] w-full max-w-[1440px] items-center justify-between gap-4 px-5 lg:px-8"
       >
-        <!-- Logo Admin: kembali ke Dashboard -->
+        <!-- Logo Admin -->
         <RouterLink to="/admin/dashboard" aria-label="Dashboard Admin" class="shrink-0">
           <img :src="tripmateLogo" alt="TripMate" class="h-[75px] w-[222px] object-contain" />
         </RouterLink>
@@ -92,7 +100,6 @@ onUnmounted(() => {
             Hai, {{ currentUser?.name || 'Admin' }}
           </span>
 
-          <!-- Tombol Profil -->
           <RouterLink
             to="/profile"
             class="rounded-full border border-[#347bd0] px-4 py-2 text-sm font-medium text-[#347bd0] transition hover:bg-blue-50 sm:px-5"
@@ -100,7 +107,6 @@ onUnmounted(() => {
             Profil Saya
           </RouterLink>
 
-          <!-- Tombol Keluar -->
           <button
             type="button"
             class="rounded-full border border-[#347bd0] px-4 py-2 text-sm font-medium text-[#347bd0] transition hover:bg-blue-50 sm:px-6"
@@ -117,7 +123,7 @@ onUnmounted(() => {
       <nav
         class="mx-auto flex min-h-[72px] w-full max-w-[1440px] items-center justify-between gap-5 px-5 lg:px-8"
       >
-        <!-- Logo Pengguna: kembali ke Beranda -->
+        <!-- Logo Pengguna -->
         <RouterLink to="/" aria-label="TripMate Beranda" class="shrink-0">
           <img :src="tripmateLogo" alt="TripMate" class="h-[75px] w-[222px] object-contain" />
         </RouterLink>
@@ -162,6 +168,23 @@ onUnmounted(() => {
               Hai, {{ currentUser.name }}
             </span>
 
+            <!-- Badge Status -->
+            <span
+              class="rounded-full px-3 py-1.5 text-xs font-bold tracking-wider"
+              :class="isPremium ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'"
+            >
+              {{ isPremium ? 'PREMIUM ✨' : 'FREE' }}
+            </span>
+
+            <!-- Upgrade hanya untuk pengguna Free -->
+            <RouterLink
+              v-if="!isPremium"
+              to="/premium"
+              class="rounded-full bg-[#347bd0] px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
+            >
+              Upgrade Premium
+            </RouterLink>
+
             <RouterLink
               to="/profile"
               class="rounded-full border border-[#347bd0] px-5 py-2 text-sm text-[#347bd0] transition hover:bg-blue-50"
@@ -191,7 +214,7 @@ onUnmounted(() => {
         </button>
       </nav>
 
-      <!-- Menu Mobile -->
+      <!-- MENU MOBILE -->
       <div v-if="menuOpen" class="border-t border-slate-200 bg-[#f5f9ff] p-4 md:hidden">
         <div class="flex flex-col gap-1">
           <RouterLink
@@ -227,6 +250,24 @@ onUnmounted(() => {
               Hai, {{ currentUser.name }}
             </div>
 
+            <!-- Badge Status Mobile -->
+            <div
+              class="mx-3 mb-2 w-fit rounded-full px-3 py-1.5 text-xs font-bold tracking-wider"
+              :class="isPremium ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'"
+            >
+              {{ isPremium ? 'PREMIUM ✨' : 'FREE' }}
+            </div>
+
+            <!-- Upgrade Mobile hanya untuk Free -->
+            <RouterLink
+              v-if="!isPremium"
+              to="/premium"
+              class="rounded-lg bg-[#347bd0] px-3 py-3 text-sm font-medium text-white"
+              @click="menuOpen = false"
+            >
+              Upgrade Premium
+            </RouterLink>
+
             <RouterLink
               to="/profile"
               class="rounded-lg px-3 py-3 text-sm text-[#347bd0] hover:bg-blue-50"
@@ -258,16 +299,13 @@ onUnmounted(() => {
       class="w-full bg-gradient-to-b from-[#293f58] to-[#3478ba] text-white"
     >
       <div class="mx-auto flex w-full max-w-[1200px] flex-col items-center px-5 py-8 text-center">
-        <!-- Logo -->
         <RouterLink to="/admin/dashboard" aria-label="Dashboard Admin" class="inline-block">
           <img :src="tripmateLogo" alt="TripMate" class="h-[85px] w-[230px] object-contain" />
         </RouterLink>
 
-        <!-- Keterangan -->
         <p class="mt-2 text-sm font-medium text-blue-100">Administrator Panel</p>
       </div>
 
-      <!-- Copyright -->
       <div
         class="mx-auto w-full max-w-[1200px] border-t border-white/20 px-5 py-5 text-center text-sm text-blue-100"
       >
@@ -293,6 +331,7 @@ onUnmounted(() => {
           </p>
         </div>
 
+        <!-- Jelajahi -->
         <div class="border-white/20 lg:border-l lg:pl-8">
           <h2 class="mb-3 font-semibold">Jelajahi</h2>
 
@@ -305,9 +344,12 @@ onUnmounted(() => {
             >
               {{ link.label }}
             </RouterLink>
+
+            <RouterLink to="/premium" class="hover:text-white"> Upgrade Premium </RouterLink>
           </div>
         </div>
 
+        <!-- Hubungi Kami -->
         <div class="border-white/20 lg:border-l lg:pl-8">
           <h2 class="mb-3 font-semibold">Hubungi Kami</h2>
 
@@ -327,6 +369,7 @@ onUnmounted(() => {
           </a>
         </div>
 
+        <!-- Tentang -->
         <div class="border-white/20 lg:border-l lg:pl-8">
           <h2 class="mb-3 font-semibold">Tentang &amp; Bantuan</h2>
 

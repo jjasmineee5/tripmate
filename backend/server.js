@@ -22,6 +22,7 @@ const daftarBawaanRoutes = require('./daftarBawaanRoutes')
 const rencanaPerjalananRoutes = require('./rencanaPerjalananRoutes')
 const premiumRoutes = require('./premiumRoutes')
 const premiumNotification = require('./premiumNotification')
+const premiumItineraryRoutes = require('./premiumItineraryRoutes')
 
 app.use('/api/auth', authRoutes)
 app.use('/api/perjalanan', perjalananRoutes)
@@ -34,6 +35,7 @@ app.use('/api/daftar-bawaan', daftarBawaanRoutes)
 app.use('/api/itinerary-db', rencanaPerjalananRoutes)
 app.use('/api/premium', premiumRoutes)
 app.use('/api/premium/notification', premiumNotification)
+app.use('/api/premium/itinerary', premiumItineraryRoutes)
 
 // ========================================
 // HEALTH CHECK

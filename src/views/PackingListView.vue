@@ -7,9 +7,17 @@ const route = useRoute()
 const tripId = ref(route.query.tripId || '')
 const isSavingDB = ref(false)
 
-const storageKey = 'tripmate-packing-items'
-const flightStorageKey = 'tripmate-selected-flight'
-const itineraryStorageKey = 'tripmate-itinerary'
+const currentUser = (() => {
+  try {
+    return JSON.parse(localStorage.getItem('tripmate-current-user') || '{}')
+  } catch {
+    return {}
+  }
+})()
+const userId = currentUser.id ?? currentUser.id_pengguna ?? 'unknown'
+const storageKey = `tripmate-packing-items-user-${userId}`
+const flightStorageKey = `tripmate-selected-flight-user-${userId}`
+const itineraryStorageKey = `tripmate-itinerary-user-${userId}`
 
 const destination = ref('')
 const duration = ref(3)

@@ -35,6 +35,9 @@ router.get('/packages', async (req, res) => {
 router.post('/transactions', verifyToken, async (req, res) => {
   let connection
   let transactionStarted = false
+  let kodeTransaksi = null
+  let databaseTransactionCreated = false
+  let paymentCreated = false
 
   try {
     const userId = req.user.id
@@ -47,12 +50,22 @@ router.post('/transactions', verifyToken, async (req, res) => {
       })
     }
 
+    // Validasi ID paket
+    const packageId = Number(id_paket)
+
+    if (!Number.isInteger(packageId) || packageId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID paket Premium tidak valid.',
+      })
+    }
+
     // Ambil paket Premium yang aktif
     const [packages] = await db.execute(
       `SELECT id_paket, nama_paket, durasi_hari, harga
        FROM paket_premium
        WHERE id_paket = ? AND status_aktif = 1`,
-      [id_paket],
+      [packageId],
     )
 
     if (packages.length === 0) {
@@ -65,8 +78,15 @@ router.post('/transactions', verifyToken, async (req, res) => {
     const selectedPackage = packages[0]
     const jumlah = Number(selectedPackage.harga)
 
+    if (!Number.isFinite(jumlah) || jumlah <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Harga paket Premium tidak valid.',
+      })
+    }
+
     // Buat kode transaksi unik
-    const kodeTransaksi = 'TM-' + Date.now() + '-' + userId
+    kodeTransaksi = 'TM-' + Date.now() + '-' + userId
 
     connection = await db.getConnection()
 
@@ -89,16 +109,9 @@ router.post('/transactions', verifyToken, async (req, res) => {
 
     await connection.commit()
     transactionStarted = false
-
-    // Cek method Snap Midtrans
-    console.log('Snap object:', snap)
-    console.log('createTransaction:', typeof snap.createTransaction)
+    databaseTransactionCreated = true
 
     // Buat transaksi pembayaran Snap Midtrans
-    if (typeof snap.createTransaction !== 'function') {
-      throw new Error('Method createTransaction tidak tersedia pada objek Snap Midtrans.')
-    }
-
     const snapResponse = await snap.createTransaction({
       transaction_details: {
         order_id: kodeTransaksi,
@@ -113,6 +126,8 @@ router.post('/transactions', verifyToken, async (req, res) => {
         },
       ],
     })
+
+    paymentCreated = true
 
     return res.status(201).json({
       success: true,
@@ -131,6 +146,26 @@ router.post('/transactions', verifyToken, async (req, res) => {
   } catch (error) {
     if (connection && transactionStarted) {
       await connection.rollback()
+      transactionStarted = false
+    }
+
+    // Jika transaksi database sudah dibuat tetapi Midtrans gagal,
+    // tandai transaksi sebagai failed
+    if (databaseTransactionCreated && !paymentCreated && kodeTransaksi) {
+      try {
+        await db.execute(
+          `UPDATE transaksi_premium
+           SET status_pembayaran = 'failed'
+           WHERE kode_transaksi = ?
+             AND status_pembayaran = 'pending'`,
+          [kodeTransaksi],
+        )
+      } catch (updateError) {
+        console.error(
+          'Gagal memperbarui status transaksi setelah Midtrans gagal:',
+          updateError.message,
+        )
+      }
     }
 
     console.error('Gagal membuat transaksi Premium:', error.message)

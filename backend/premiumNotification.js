@@ -13,23 +13,27 @@ const coreApi = new midtransClient.CoreApi({
 // POST /api/premium/notification
 router.post('/', async (req, res) => {
   let connection
+  let transactionStarted = false
 
   try {
-    // Verifikasi dan ambil status transaksi dari Midtrans
+    // Verifikasi notifikasi dan ambil status transaksi dari Midtrans
     const notification = await coreApi.transaction.notification(req.body)
 
     const orderId = notification.order_id
     const transactionStatus = notification.transaction_status
     const fraudStatus = notification.fraud_status
     const paymentType = notification.payment_type
+    const grossAmount = notification.gross_amount
 
     console.log('STATUS MIDTRANS:', {
       orderId,
       transactionStatus,
       fraudStatus,
       paymentType,
+      grossAmount,
     })
 
+    // Tentukan status pembayaran
     let statusPembayaran
 
     if (transactionStatus === 'capture') {
@@ -50,10 +54,11 @@ router.post('/', async (req, res) => {
 
     connection = await db.getConnection()
     await connection.beginTransaction()
+    transactionStarted = true
 
-    // Update status transaksi Premium
+    // Ambil transaksi dan kunci baris selama proses
     const [transactions] = await connection.execute(
-      `SELECT id_transaksi, id_pengguna, id_paket
+      `SELECT id_transaksi, id_pengguna, id_paket, jumlah, status_pembayaran
        FROM transaksi_premium
        WHERE kode_transaksi = ?
        FOR UPDATE`,
@@ -62,6 +67,7 @@ router.post('/', async (req, res) => {
 
     if (transactions.length === 0) {
       await connection.rollback()
+      transactionStarted = false
 
       return res.status(404).json({
         success: false,
@@ -71,16 +77,70 @@ router.post('/', async (req, res) => {
 
     const transaksi = transactions[0]
 
+    // Verifikasi nominal pembayaran sebelum memproses pembayaran berhasil
+    if (statusPembayaran === 'paid') {
+      const nominalDatabase = Number(transaksi.jumlah)
+      const nominalMidtrans = Number(grossAmount)
+
+      if (
+        !Number.isFinite(nominalDatabase) ||
+        !Number.isFinite(nominalMidtrans) ||
+        nominalDatabase !== nominalMidtrans
+      ) {
+        await connection.rollback()
+        transactionStarted = false
+
+        console.error('Nominal pembayaran tidak cocok:', {
+          orderId,
+          nominalDatabase,
+          nominalMidtrans,
+        })
+
+        return res.status(400).json({
+          success: false,
+          message: 'Nominal pembayaran tidak sesuai.',
+        })
+      }
+    }
+
+    // Jangan menurunkan status transaksi yang sudah paid
+    if (transaksi.status_pembayaran === 'paid') {
+      // Pastikan langganan sudah ada
+      const [existingSubscriptions] = await connection.execute(
+        `SELECT id_langganan
+         FROM langganan_premium
+         WHERE id_transaksi = ?
+         LIMIT 1`,
+        [transaksi.id_transaksi],
+      )
+
+      // Jika transaksi sudah paid tetapi langganan belum ada,
+      // proses pemulihan aktivasi di bawah
+      if (existingSubscriptions.length > 0) {
+        await connection.commit()
+        transactionStarted = false
+
+        return res.status(200).json({
+          success: true,
+          message: 'Transaksi sudah berhasil diproses.',
+        })
+      }
+    }
+
+    // Update status transaksi
     await connection.execute(
       `UPDATE transaksi_premium
        SET status_pembayaran = ?,
            metode_pembayaran = ?,
-           tanggal_transaksi = NOW()
+           tanggal_transaksi = CASE
+             WHEN ? = 'paid' AND tanggal_transaksi IS NULL THEN NOW()
+             ELSE tanggal_transaksi
+           END
        WHERE kode_transaksi = ?`,
-      [statusPembayaran, paymentType, orderId],
+      [statusPembayaran, paymentType || null, statusPembayaran, orderId],
     )
 
-    // Aktifkan Premium jika pembayaran berhasil
+    // Aktifkan Premium hanya jika pembayaran berhasil
     if (statusPembayaran === 'paid') {
       const [packages] = await connection.execute(
         `SELECT durasi_hari
@@ -89,10 +149,28 @@ router.post('/', async (req, res) => {
         [transaksi.id_paket],
       )
 
-      if (packages.length > 0) {
-        const durasiHari = packages[0].durasi_hari
+      if (packages.length === 0) {
+        throw new Error('Paket Premium tidak ditemukan.')
+      }
 
-        // Cek apakah pengguna masih memiliki Premium aktif
+      const durasiHari = Number(packages[0].durasi_hari)
+
+      if (!Number.isInteger(durasiHari) || durasiHari <= 0) {
+        throw new Error('Durasi paket Premium tidak valid.')
+      }
+
+      // Cek apakah langganan dari transaksi ini sudah pernah dibuat
+      const [existingSubscriptions] = await connection.execute(
+        `SELECT id_langganan
+         FROM langganan_premium
+         WHERE id_transaksi = ?
+         LIMIT 1`,
+        [transaksi.id_transaksi],
+      )
+
+      // Jika belum ada, buat langganan
+      if (existingSubscriptions.length === 0) {
+        // Cari langganan aktif yang masih berlaku
         const [subscriptions] = await connection.execute(
           `SELECT tanggal_berakhir
            FROM langganan_premium
@@ -106,7 +184,6 @@ router.post('/', async (req, res) => {
         )
 
         let tanggalMulai
-        let tanggalBerakhir
 
         if (subscriptions.length > 0) {
           tanggalMulai = subscriptions[0].tanggal_berakhir
@@ -119,34 +196,40 @@ router.post('/', async (req, res) => {
 
         berakhir.setDate(berakhir.getDate() + durasiHari)
 
-        tanggalBerakhir = berakhir
-
         await connection.execute(
           `INSERT INTO langganan_premium
-           (id_pengguna, id_transaksi, tanggal_mulai, tanggal_berakhir, status)
+           (
+             id_pengguna,
+             id_transaksi,
+             tanggal_mulai,
+             tanggal_berakhir,
+             status
+           )
            VALUES (?, ?, ?, ?, 'aktif')`,
-          [transaksi.id_pengguna, transaksi.id_transaksi, mulai, tanggalBerakhir],
-        )
-
-        // Aktifkan status Premium pada akun pengguna
-        await connection.execute(
-          `UPDATE pengguna
-           SET status_premium = 1
-           WHERE id_pengguna = ?`,
-          [transaksi.id_pengguna],
+          [transaksi.id_pengguna, transaksi.id_transaksi, mulai, berakhir],
         )
       }
+
+      // Aktifkan Premium pada akun pengguna
+      await connection.execute(
+        `UPDATE pengguna
+         SET status_premium = 1
+         WHERE id_pengguna = ?`,
+        [transaksi.id_pengguna],
+      )
     }
 
     await connection.commit()
+    transactionStarted = false
 
     return res.status(200).json({
       success: true,
       message: 'Notifikasi pembayaran berhasil diproses.',
     })
   } catch (error) {
-    if (connection) {
+    if (connection && transactionStarted) {
       await connection.rollback()
+      transactionStarted = false
     }
 
     console.error('Gagal memproses notifikasi Midtrans:', error.message)
